@@ -1,0 +1,15 @@
+[Unit]
+Description=Connect LE Audio hearing aids at session start
+# WirePlumber must have registered its BAP endpoints with BlueZ before the
+# aids connect, otherwise there is no BAP profile to negotiate.
+After=wireplumber.service graphical-session.target
+Requires=wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 8
+ExecStart=%h/.local/bin/connect-hearing-aids
+TimeoutStartSec=180
+
+[Install]
+WantedBy=graphical-session.target

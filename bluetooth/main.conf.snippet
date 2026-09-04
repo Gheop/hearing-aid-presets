@@ -1,0 +1,17 @@
+# Lines to set in /etc/bluetooth/main.conf (they already exist, commented out).
+# Restart bluetoothd afterwards: sudo systemctl restart bluetooth
+
+[General]
+# Enables the LE Audio profiles (BAP, CSIP, VCP, MICP...) in bluetoothd.
+Experimental = true
+# Enables the kernel ISO socket. Without it bluetoothd logs
+# "BAP requires ISO Socket which is not enabled" and no BAP profile shows up.
+KernelExperimental = 6fbaf188-05e0-496a-9885-d6ddfdb4e03e
+
+[LE]
+# Only needed if you also use the ASHA path (asha_pipewire_sink). Harmless
+# for LE Audio.
+MinConnectionInterval=16
+MaxConnectionInterval=16
+ConnectionLatency=0
+ConnectionSupervisionTimeout=100

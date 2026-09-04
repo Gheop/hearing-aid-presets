@@ -1,0 +1,118 @@
+#!/bin/bash
+# Connect LE Audio hearing aids and make sure PipeWire ends up on the BAP
+# profile.
+#
+# After PipeWire restarts (new desktop session), BlueZ does not renegotiate
+# BAP for hearing aids that are already connected, and WirePlumber may fall
+# back to the "asha-sink" profile, which does not work on LE Audio devices.
+# The fix is a clean disconnect / reconnect once WirePlumber has registered
+# its BAP endpoints. This script does that, and is meant to run from the
+# hearing-aids-connect user service at session start, or by hand.
+#
+# Configuration: ~/.config/hearing-aids/devices.conf
+#   LEFT=AA:BB:CC:DD:EE:FF
+#   RIGHT=AA:BB:CC:DD:EE:00
+#   LEFT_ALIAS="Vivia"        # optional, shown in GNOME
+#   RIGHT_ALIAS="Vivia R"     # optional
+
+set -u
+
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/hearing-aids/devices.conf"
+if [ ! -r "$CONFIG" ]; then
+    echo "Missing $CONFIG (see README, section Configuration)." >&2
+    exit 1
+fi
+# shellcheck source=/dev/null
+. "$CONFIG"
+: "${LEFT:?LEFT= missing in $CONFIG}"
+: "${RIGHT:?RIGHT= missing in $CONFIG}"
+LEFT_ALIAS="${LEFT_ALIAS:-}"
+RIGHT_ALIAS="${RIGHT_ALIAS:-}"
+
+set_alias() {
+    local mac="$1" name="$2"
+    [ -n "$name" ] || return 0
+    local path="/org/bluez/hci0/dev_${mac//:/_}"
+    busctl call org.bluez "$path" org.freedesktop.DBus.Properties Set ssv \
+        org.bluez.Device1 Alias s "$name" 2>/dev/null
+}
+
+is_connected() {
+    bluetoothctl info "$1" 2>/dev/null | grep -q "Connected: yes"
+}
+
+active_profile() {
+    local card="bluez_card.${1//:/_}"
+    LC_ALL=C pactl list cards 2>/dev/null | awk -v card="$card" '
+        $1 == "Name:" { current = $2 }
+        current == card && /Active Profile:/ { print $NF; exit }'
+}
+
+connect_device() {
+    local mac="$1" alias="$2"
+    local label="${alias:-$mac}"
+
+    set_alias "$mac" "$alias"
+
+    if is_connected "$mac"; then
+        echo "  $label: already connected"
+        return 0
+    fi
+
+    echo "  $label: connecting..."
+    # The first attempt right after a bluetoothd restart often fails with
+    # le-connection-abort-by-local; the second one goes through.
+    for _ in 1 2; do
+        if timeout 40 bluetoothctl connect "$mac" > /dev/null 2>&1; then
+            echo "  $label: connected"
+            return 0
+        fi
+        sleep 3
+    done
+    echo "  $label: failed"
+    return 1
+}
+
+# True when every connected aid is on the bap-sink profile.
+bap_ok() {
+    local mac
+    for mac in "$RIGHT" "$LEFT"; do
+        is_connected "$mac" || continue
+        [ "$(active_profile "$mac")" = "bap-sink" ] || return 1
+    done
+    return 0
+}
+
+connect_both() {
+    connect_device "$RIGHT" "$RIGHT_ALIAS"
+    connect_device "$LEFT" "$LEFT_ALIAS"
+}
+
+echo "Connecting hearing aids..."
+connect_both
+
+sleep 6
+if bap_ok; then
+    echo "BAP profile active."
+    exit 0
+fi
+
+echo "No BAP profile, reconnecting so BlueZ renegotiates..."
+for mac in "$RIGHT" "$LEFT"; do
+    is_connected "$mac" && timeout 20 bluetoothctl disconnect "$mac" > /dev/null 2>&1
+done
+# The aids reconnect on their own within seconds. Calling connect before the
+# link is really down makes BlueZ skip the renegotiation.
+for _ in $(seq 1 15); do
+    is_connected "$RIGHT" || is_connected "$LEFT" || break
+    sleep 1
+done
+sleep 2
+connect_both
+sleep 10
+if bap_ok; then
+    echo "BAP profile active."
+else
+    echo "Still no BAP profile. Try: sudo systemctl restart bluetooth, then run this script again." >&2
+    exit 1
+fi

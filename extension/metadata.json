@@ -1,0 +1,8 @@
+{
+  "uuid": "hearing-aid-presets@gheop.github",
+  "name": "Hearing Aid Presets",
+  "description": "Affiche une icône quand des aides auditives LE Audio (service HAS) sont connectées et permet de changer leur programme.",
+  "shell-version": ["50"],
+  "url": "https://github.com/gheop/hearing-aid-presets",
+  "version": 1
+}
