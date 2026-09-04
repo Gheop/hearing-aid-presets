@@ -2,6 +2,8 @@
 
 Use LE Audio hearing aids on Linux, and switch their programs from the GNOME top bar.
 
+![Top bar menu listing the hearing aid programs](docs/images/menu.webp)
+
 Tested with a pair of **ReSound Vivia 960** on Fedora 44 (kernel 7.1, BlueZ 5.87, PipeWire 1.6.8, WirePlumber 0.5.14, GNOME 50, Intel AX211). Any hearing aid that implements the Bluetooth LE Audio *Hearing Access Service* (HAS) should work with the extension; the setup notes apply to any LE Audio device.
 
 ## Compatible devices
@@ -98,6 +100,8 @@ The preset list arrives as one indication per preset (opcode `0x02`). To switch,
 
 No daemon, no polling: everything is driven by D-Bus signals.
 
+For development, `gnome-shell --devkit --wayland` runs a second shell in a window against the real BlueZ; with `HEARING_AID_PRESETS_SCREENSHOT=/path/menu.png` in its environment the extension opens its menu and saves the screenshot used above.
+
 ## Troubleshooting
 
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
@@ -122,7 +126,7 @@ scripts/              connect-hearing-aids
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet
 po/                   translations (French so far)
-docs/                 verified hearing aids and Bluetooth controllers
+docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 

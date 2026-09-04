@@ -7,6 +7,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
+import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -491,5 +492,43 @@ export default class HearingAidPresetsExtension extends Extension {
     onAliasChanged(device) {
         if (this._indicator && device === this._device)
             this._indicator.setAlias(device.alias);
+        this._maybeScreenshot();
+    }
+
+    // Development helper, used to produce the README screenshot from a
+    // `gnome-shell --devkit` session: with HEARING_AID_PRESETS_SCREENSHOT set
+    // to a PNG path, open the menu once the model name is known and save the
+    // menu plus the panel above it. Inert otherwise.
+    _maybeScreenshot() {
+        const path = GLib.getenv('HEARING_AID_PRESETS_SCREENSHOT');
+        if (!path || this._screenshotDone || !this._indicator)
+            return;
+        this._screenshotDone = true;
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            this._indicator.menu.open(false);
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
+                const actor = this._indicator.menu.actor;
+                const [x, y] = actor.get_transformed_position();
+                const [w, h] = actor.get_transformed_size();
+                const margin = 24;
+                const left = Math.max(0, Math.floor(x) - margin);
+                const width = Math.ceil(w) + 2 * margin;
+                const height = Math.ceil(y + h) + margin;
+                const stream = Gio.File.new_for_path(path)
+                    .replace(null, false, Gio.FileCreateFlags.NONE, null);
+                const shooter = new Shell.Screenshot();
+                shooter.screenshot_area(left, 0, width, height, stream, (o, res) => {
+                    try {
+                        shooter.screenshot_area_finish(res);
+                        console.log(`hearing-aid-presets: screenshot saved to ${path}`);
+                    } catch (e) {
+                        console.error(`hearing-aid-presets: screenshot failed (${e.message})`);
+                    }
+                    stream.close(null);
+                });
+                return GLib.SOURCE_REMOVE;
+            });
+            return GLib.SOURCE_REMOVE;
+        });
     }
 }
