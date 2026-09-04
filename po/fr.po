@@ -21,3 +21,12 @@ msgstr "Aides auditives"
 
 msgid "The hearing aid refused the program change."
 msgstr "L'aide auditive a refusé le changement de programme."
+
+msgid "Left"
+msgstr "Gauche"
+
+msgid "Right"
+msgstr "Droite"
+
+msgid "Cannot set the volume. Is bluetoothd running with --noplugin=vcp?"
+msgstr "Impossible de régler le volume. bluetoothd tourne-t-il avec --noplugin=vcp ?"

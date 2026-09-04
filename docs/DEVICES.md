@@ -11,7 +11,7 @@ Manufacturer claims are not enough to move a device to *verified*: some "LE Audi
 
 | Device | Brand / platform | Model string (DIS) | Programs (HAS) | Preset sync | Stereo | Reported on | Notes |
 |---|---|---|---|---|---|---|---|
-| ReSound Vivia 960 (pair) | GN Hearing | `ReSound` / `VI960S-DRWC` | 4 (Universal, Noise, Outdoor, Universal(1)) | yes, `0x08` required, `0x05` refused with ATT 0x80 | yes, one sink, right grouped via CSIS | Fedora 44, BlueZ 5.87, PipeWire 1.6.8, GNOME 50, Intel AX211 | LC3 16 kHz per ear, 7.5 ms frames, 2M PHY, 5 retransmissions. Also supports ASHA and the 24 kHz LC3 configuration. MICS mute is accepted but only affects the mic feed to the PC. |
+| ReSound Vivia 960 (pair) | GN Hearing | `ReSound` / `VI960S-DRWC` | 4 (Universal, Noise, Outdoor, Universal(1)) | yes, `0x08` required, `0x05` refused with ATT 0x80 | yes, one sink, right grouped via CSIS | Fedora 44, BlueZ 5.87, PipeWire 1.6.8, GNOME 50, Intel AX211 | LC3 16 kHz per ear, 7.5 ms frames, 2M PHY, 5 retransmissions. Also supports ASHA and the 24 kHz LC3 configuration. MICS mute is accepted but only affects the mic feed to the PC. VCS per-ear volume works once BlueZ's vcp plugin is disabled (it syncs the set otherwise). Battery Level readable, two battery services per aid. |
 
 ## Expected
 

@@ -61,7 +61,9 @@ cat <<EOF
 
 Done. Remaining steps (root):
   1. Edit /etc/bluetooth/main.conf as in bluetooth/main.conf.snippet
-  2. sudo systemctl restart bluetooth
+  2. sudo mkdir -p /etc/systemd/system/bluetooth.service.d
+     sudo cp $HERE/bluetooth/noplugin-vcp.conf /etc/systemd/system/bluetooth.service.d/
+  3. sudo systemctl daemon-reload && sudo systemctl restart bluetooth
 Then log out and back in: the extension loads at login and the service
 connects the aids.
 EOF

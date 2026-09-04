@@ -1,11 +1,11 @@
 {
   "uuid": "hearing-aid-presets@gheop.github",
   "name": "Hearing Aid Presets",
-  "description": "Shows an indicator while LE Audio hearing aids (Hearing Access Service) are connected and lets you switch their programs.",
+  "description": "Indicator for LE Audio hearing aids: programs (Hearing Access Service), per-ear volume, battery levels.",
   "shell-version": [
     "50"
   ],
   "url": "https://github.com/gheop/hearing-aid-presets",
-  "version": 2,
+  "version": 3,
   "gettext-domain": "hearing-aid-presets"
 }

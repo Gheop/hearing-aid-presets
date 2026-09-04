@@ -30,7 +30,7 @@ Keywords, for the search engines: Bluetooth LE Audio hearing aids on Linux, Aura
 What you get:
 
 - Stereo LC3 streaming from PipeWire to both aids, through the standard BlueZ + PipeWire stack. No third-party daemon.
-- A GNOME Shell extension: an ear icon appears while the aids are connected, with a menu listing their programs ("Universal", "Noise", "Outdoor"...). One click switches both ears. The menu follows changes made on the aids or from the phone.
+- A GNOME Shell extension: an ear icon appears while the aids are connected, with a menu showing the model, the battery level of each ear, a volume slider per ear, and the programs ("Universal", "Noise", "Outdoor"...). One click switches both ears. The menu follows changes made on the aids or from the phone.
 - A `connect-hearing-aids` script and a user service that connect the aids at login and work around a BlueZ quirk that otherwise leaves you without sound after a session restart.
 
 ## Requirements
@@ -53,7 +53,16 @@ KernelExperimental = 6fbaf188-05e0-496a-9885-d6ddfdb4e03e
 
 The first line turns on the LE Audio profiles. The second enables the kernel ISO socket; without it bluetoothd logs `BAP requires ISO Socket which is not enabled` and only the ASHA profile shows up. See `bluetooth/main.conf.snippet`.
 
-Then `sudo systemctl restart bluetooth`.
+Then keep bluetoothd's built-in `vcp` plugin out of the way. It claims the Volume Control Service characteristics (the extension would get `Operation Not Authorized`) and, worse for hearing aids, it propagates any volume change to the whole coordinated set, so left and right can never differ:
+
+```sh
+sudo mkdir -p /etc/systemd/system/bluetooth.service.d
+sudo cp bluetooth/noplugin-vcp.conf /etc/systemd/system/bluetooth.service.d/
+sudo systemctl daemon-reload
+sudo systemctl restart bluetooth
+```
+
+The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
 
 ### 2. User side
 
@@ -80,9 +89,9 @@ Pair both aids once with the GNOME Bluetooth panel or `bluetoothctl` (put them i
 
 Pick "Bluetooth – Vivia" (or your alias) as the output in the GNOME sound menu. PipeWire shows one stereo sink; the right aid is grouped into it through the LE Audio coordinated set.
 
-The ear icon in the top bar opens the program list. The checked entry is the active program. The header shows the manufacturer and model read from the Device Information Service ("ReSound Vivia 960"), or the device alias when the aid does not provide them. Menu strings are in English with a French translation; add a `po/<lang>.po` for another language and run `msgfmt` as in `install.sh`.
+The ear icon in the top bar opens the menu: battery level of each ear, one volume slider per ear, then the program list where the checked entry is the active program. The volume sliders drive the aids' own volume (what the buttons on the aids and the phone app change), independently for each ear; they follow changes made elsewhere. The header shows the manufacturer and model read from the Device Information Service ("ReSound Vivia 960"), or the device alias when the aid does not provide them. Menu strings are in English with a French translation; add a `po/<lang>.po` for another language and run `msgfmt` as in `install.sh`.
 
-Battery levels: bluetoothd does not publish `org.bluez.Battery1` for these aids (it logs `More than one BATT service exists for this device` and gives up), so the GNOME Bluetooth panel shows nothing. The [Bluetooth Battery Meter](https://extensions.gnome.org/extension/6670/bluetooth-battery-meter/) extension reads the Battery Level characteristic straight from GATT and shows one entry per aid, as long as BlueZ exports their GATT objects (see Troubleshooting when only one aid appears).
+Battery levels come straight from each aid's Battery Level characteristic; bluetoothd itself does not publish `org.bluez.Battery1` for these aids (it logs `More than one BATT service exists for this device` and gives up), so the GNOME Bluetooth panel shows nothing.
 
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
@@ -98,7 +107,7 @@ BlueZ exports every GATT characteristic of a connected device on D-Bus. The exte
 | Hearing Aid Preset Control Point | 0x2BDB | `0x01` Read Presets, `0x05` Set Active Preset, `0x08` Set Active Preset (synchronised) |
 | Active Preset Index | 0x2BDC | current program, notified on change |
 
-The preset list arrives as one indication per preset (opcode `0x02`). To switch, the extension writes `0x08 <index>` when the aids advertise preset synchronisation (the Vivia refuse the plain `0x05` with ATT error `0x80`), and falls back to `0x05` otherwise. The header comes from the Device Information Service (`0x180A`): Manufacturer Name String (`0x2A29`) and Model Number String (`0x2A24`), with a small table turning internal codes such as `VI960S-DRWC` into retail names.
+The preset list arrives as one indication per preset (opcode `0x02`). To switch, the extension writes `0x08 <index>` when the aids advertise preset synchronisation (the Vivia refuse the plain `0x05` with ATT error `0x80`), and falls back to `0x05` otherwise. Battery levels are the Battery Level characteristic (`0x2A19`) of each aid, and the sliders write Set Absolute Volume (`0x04`, change counter, volume 0..255) to the Volume Control Point (`0x2B7E`) of the Volume Control Service (`0x1844`), following Volume State (`0x2B7D`) notifications. Left and right come from the BAP endpoint `Locations` bitmask. The header comes from the Device Information Service (`0x180A`): Manufacturer Name String (`0x2A29`) and Model Number String (`0x2A24`), with a small table turning internal codes such as `VI960S-DRWC` into retail names.
 
 No daemon, no polling: everything is driven by D-Bus signals.
 
@@ -109,6 +118,8 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
 
 **One aid shows no GATT objects on D-Bus** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension or battery meters only see the other aid). Seen with BlueZ 5.87 after reconnecting one aid alone: bluetoothd logs `No matching connection for device` and attaches no profile. `sudo systemctl restart bluetooth`, then `connect-hearing-aids`.
+
+**`Cannot set the volume` notification, or the sliders snap back.** bluetoothd is running without `--noplugin=vcp`; check `systemctl show -p ExecStart bluetooth`.
 
 **`BAP requires ISO Socket which is not enabled`** in the bluetoothd journal: the `KernelExperimental` line is missing.
 
@@ -126,13 +137,19 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
 scripts/              connect-hearing-aids
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet
+bluetooth/            main.conf snippet and the bluetoothd systemd override
 po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.2.0 — Battery levels and per-ear volume (2026-09-04)
+
+- Battery level of each ear in the menu, with the usual battery icons, read from the aids' Battery Level characteristic.
+- One volume slider per ear, driving the aids' own volume through the Volume Control Service. Requires bluetoothd with `--noplugin=vcp`: BlueZ's plugin otherwise claims the service and forces both ears to the same volume.
+- Left and right are identified from the BAP endpoint locations.
 
 ### v1.1.0 — Model name in the menu, translations (2026-09-04)
 
