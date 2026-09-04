@@ -14,6 +14,15 @@ CONF_DIR="$HOME/.config/hearing-aids"
 echo "Extension -> $EXT_DIR"
 mkdir -p "$EXT_DIR"
 cp -r "$HERE/extension/." "$EXT_DIR/"
+# Translations: compile every po/<lang>.po into the extension's locale tree.
+if command -v msgfmt > /dev/null; then
+    for po in "$HERE"/po/*.po; do
+        [ -e "$po" ] || continue
+        lang="$(basename "$po" .po)"
+        mkdir -p "$EXT_DIR/locale/$lang/LC_MESSAGES"
+        msgfmt -o "$EXT_DIR/locale/$lang/LC_MESSAGES/hearing-aid-presets.mo" "$po"
+    done
+fi
 
 echo "Script -> $BIN_DIR/connect-hearing-aids"
 mkdir -p "$BIN_DIR"
@@ -52,9 +61,7 @@ cat <<EOF
 
 Done. Remaining steps (root):
   1. Edit /etc/bluetooth/main.conf as in bluetooth/main.conf.snippet
-  2. sudo mkdir -p /etc/systemd/system/bluetooth.service.d
-     sudo cp $HERE/bluetooth/noplugin-micp.conf /etc/systemd/system/bluetooth.service.d/
-  3. sudo systemctl daemon-reload && sudo systemctl restart bluetooth
+  2. sudo systemctl restart bluetooth
 Then log out and back in: the extension loads at login and the service
 connects the aids.
 EOF

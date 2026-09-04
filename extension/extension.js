@@ -1,11 +1,7 @@
-// Hearing Aid Presets : icône dans la barre quand une aide auditive LE Audio
-// exposant le Hearing Access Service (HAS, 0x1854) est connectée, menu pour
-// changer de programme et couper les micros (Microphone Control Service,
-// 0x184d). Tout passe par le GATT que BlueZ exporte sur D-Bus, aucun démon.
-//
-// Prérequis : bluetoothd lancé avec --noplugin=micp, sinon BlueZ réserve la
-// caractéristique Mute pour son plugin interne et refuse l'écriture
-// (« Operation Not Authorized »).
+// Hearing Aid Presets: a top bar indicator while an LE Audio hearing aid that
+// exposes the Hearing Access Service (HAS, 0x1854) is connected, with a menu
+// to switch its programs. Everything goes through the GATT objects BlueZ
+// exports on D-Bus: no daemon, no HAP client needed in BlueZ.
 
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -14,7 +10,7 @@ import St from 'gi://St';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
+import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const BLUEZ = 'org.bluez';
 const IFACE_DEVICE = 'org.bluez.Device1';
@@ -25,10 +21,11 @@ const UUID_HAS = '00001854-0000-1000-8000-00805f9b34fb';
 const UUID_FEATURES = '00002bda-0000-1000-8000-00805f9b34fb';
 const UUID_CONTROL_POINT = '00002bdb-0000-1000-8000-00805f9b34fb';
 const UUID_ACTIVE_INDEX = '00002bdc-0000-1000-8000-00805f9b34fb';
-const UUID_MICS = '0000184d-0000-1000-8000-00805f9b34fb';
-const UUID_MUTE = '00002bc3-0000-1000-8000-00805f9b34fb';
+const UUID_DIS = '0000180a-0000-1000-8000-00805f9b34fb';
+const UUID_MANUFACTURER = '00002a29-0000-1000-8000-00805f9b34fb';
+const UUID_MODEL = '00002a24-0000-1000-8000-00805f9b34fb';
 
-// Opcodes HAP 1.0, section 3.2.2
+// HAP 1.0, section 3.2.2
 const OP_READ_PRESETS = 0x01;
 const OP_READ_PRESET_RESPONSE = 0x02;
 const OP_PRESET_CHANGED = 0x03;
@@ -38,10 +35,18 @@ const OP_SET_ACTIVE_SYNC = 0x08;
 const FEATURE_PRESET_SYNC = 0x04;
 const PROP_AVAILABLE = 0x02;
 
-// MICS Mute : 0 actif, 1 coupé, 2 mute non disponible
-const MUTE_OFF = 0;
-const MUTE_ON = 1;
-const MUTE_DISABLED = 2;
+// Hearing aids report an internal model code ("VI960S-DRWC"), not the retail
+// name. Known prefixes; anything else is shown as is.
+const MODEL_FAMILIES = {
+    VI: 'Vivia',
+};
+
+function friendlyModel(model) {
+    const m = /^([A-Z]{2})(\d{3})/.exec(model);
+    if (m && MODEL_FAMILIES[m[1]])
+        return `${MODEL_FAMILIES[m[1]]} ${m[2]}`;
+    return model;
+}
 
 function readValue(proxy) {
     return new Promise((resolve, reject) => {
@@ -100,7 +105,6 @@ class HearingAidIndicator extends PanelMenu.Button {
         super._init(0.0, 'Hearing Aid Presets');
         this._device = device;
         this._items = new Map();
-        this._updatingSwitch = false;
 
         const iconPath = `${extension.path}/icons/hearing-aid-symbolic.svg`;
         this.add_child(new St.Icon({
@@ -114,23 +118,14 @@ class HearingAidIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
         this._section = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._section);
-        this._section.addMenuItem(new PopupMenu.PopupMenuItem('Lecture des programmes…', { reactive: false }));
-
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        this._micSwitch = new PopupMenu.PopupSwitchMenuItem('Micro vers le PC', true);
-        this._micSwitch.connect('toggled', (item, state) => {
-            if (!this._updatingSwitch)
-                this._device.setMuted(!state);
-        });
-        this.menu.addMenuItem(this._micSwitch);
-        this.setMute(device.mute);
+        this._section.addMenuItem(new PopupMenu.PopupMenuItem(_('Reading programs…'), { reactive: false }));
     }
 
     setPresets(presets, active) {
         this._section.removeAll();
         this._items.clear();
         if (presets.size === 0) {
-            this._section.addMenuItem(new PopupMenu.PopupMenuItem('Aucun programme', { reactive: false }));
+            this._section.addMenuItem(new PopupMenu.PopupMenuItem(_('No programs'), { reactive: false }));
             return;
         }
         const sorted = [...presets.entries()].sort((a, b) => a[0] - b[0]);
@@ -152,25 +147,14 @@ class HearingAidIndicator extends PanelMenu.Button {
         }
     }
 
-    // mute : null si aucune aide ne l'expose, sinon MUTE_OFF / MUTE_ON / MUTE_DISABLED
-    setMute(mute) {
-        this._updatingSwitch = true;
-        this._micSwitch.visible = mute !== null;
-        this._micSwitch.setSensitive(mute !== MUTE_DISABLED);
-        this._micSwitch.setToggleState(mute !== MUTE_ON);
-        this._updatingSwitch = false;
-    }
-
     setAlias(alias) {
         this._header.label.text = alias;
     }
 });
 
-// L'aide auditive « pilote » : la première connectée dont les trois
-// caractéristiques HAS sont exportées. Les presets étant synchronisés entre
-// les deux oreilles (bit Preset Synchronization), en piloter une suffit.
-// Le mute micro, lui, n'est pas synchronisé : on écrit sur toutes les aides
-// connectées qui l'exposent.
+// The hearing aid we drive: the first connected one whose three HAS
+// characteristics are exported. Presets are synchronised between ears
+// (Preset Synchronization feature bit), so driving one aid is enough.
 class HearingDevice {
     constructor(manager, path, deviceProxy, chars) {
         this._manager = manager;
@@ -179,19 +163,21 @@ class HearingDevice {
         this._cp = chars.controlPoint;
         this._activeChar = chars.activeIndex;
         this._featuresChar = chars.features;
+        this._manufacturerChar = chars.manufacturer || null;
+        this._modelChar = chars.model || null;
+        this.displayName = null;
         this.presets = new Map();
         this.active = null;
         this.features = 0;
-        this.mute = null;
         this._signals = [];
-        this._muteChars = new Map();   // proxy -> { signal, value }
         this._pendingRead = null;
         this._readTimeout = 0;
     }
 
     get alias() {
-        return propString(this._deviceProxy, 'Alias') ||
-            propString(this._deviceProxy, 'Name') || 'Aide auditive';
+        return this.displayName ||
+            propString(this._deviceProxy, 'Alias') ||
+            propString(this._deviceProxy, 'Name') || _('Hearing aid');
     }
 
     async start() {
@@ -204,90 +190,45 @@ class HearingDevice {
             const [features] = await readValue(this._featuresChar);
             this.features = features;
         } catch (e) {
-            console.warn(`hearing-aid-presets: lecture Features impossible (${e.message})`);
+            console.warn(`hearing-aid-presets: cannot read Features (${e.message})`);
         }
         try {
             await callSimple(this._cp, 'StartNotify');
             await callSimple(this._activeChar, 'StartNotify');
         } catch (e) {
-            // Déjà notifié par un autre client, ou aide en train de partir :
-            // on continue, les lectures directes marchent quand même.
+            // Another client already subscribed, or the aid is going away:
+            // carry on, direct reads still work.
             console.warn(`hearing-aid-presets: StartNotify (${e.message})`);
         }
         try {
             const [active] = await readValue(this._activeChar);
             this.active = active;
         } catch (e) {
-            console.warn(`hearing-aid-presets: lecture Active Preset Index (${e.message})`);
+            console.warn(`hearing-aid-presets: cannot read Active Preset Index (${e.message})`);
         }
         await this.readPresets();
+        await this._readDisplayName();
     }
 
-    // Appelé à chaque rescan : les aides arrivent l'une après l'autre.
-    async setMuteChars(proxies) {
-        const wanted = new Set(proxies.map(p => p.get_object_path()));
-        for (const [proxy, entry] of [...this._muteChars]) {
-            if (wanted.has(proxy.get_object_path()))
+    // Manufacturer + model from the Device Information Service, when present.
+    async _readDisplayName() {
+        const parts = [];
+        for (const proxy of [this._manufacturerChar, this._modelChar]) {
+            if (!proxy)
                 continue;
-            proxy.disconnect(entry.signal);
-            this._muteChars.delete(proxy);
-        }
-        for (const proxy of proxies) {
-            if ([...this._muteChars.keys()].some(p => p.get_object_path() === proxy.get_object_path()))
-                continue;
-            const signal = proxy.connect('g-properties-changed', (p, changed) => {
-                const bytes = valueBytes(changed);
-                if (!bytes)
-                    return;
-                const entry = this._muteChars.get(p);
-                if (entry) {
-                    entry.value = bytes[0];
-                    this._updateMute();
-                }
-            });
-            const entry = { signal, value: null };
-            this._muteChars.set(proxy, entry);
             try {
-                await callSimple(proxy, 'StartNotify');
+                const bytes = await readValue(proxy);
+                const text = new TextDecoder().decode(new Uint8Array(bytes)).trim();
+                if (text)
+                    parts.push(proxy === this._modelChar ? friendlyModel(text) : text);
             } catch (e) {
-                console.warn(`hearing-aid-presets: StartNotify Mute (${e.message})`);
-            }
-            try {
-                [entry.value] = await readValue(proxy);
-            } catch (e) {
-                console.warn(`hearing-aid-presets: lecture Mute (${e.message})`);
+                console.warn(`hearing-aid-presets: cannot read Device Information (${e.message})`);
             }
         }
-        this._updateMute();
-    }
-
-    _updateMute() {
-        const values = [...this._muteChars.values()].map(e => e.value).filter(v => v !== null);
-        let mute;
-        if (values.length === 0)
-            mute = null;
-        else if (values.every(v => v === MUTE_DISABLED))
-            mute = MUTE_DISABLED;
-        else if (values.some(v => v === MUTE_ON))
-            mute = MUTE_ON;    // une oreille coupée suffit à afficher « coupé »
-        else
-            mute = MUTE_OFF;
-        if (mute !== this.mute) {
-            this.mute = mute;
-            this._manager.onMuteChanged(this);
-        }
-    }
-
-    async setMuted(muted) {
-        const value = muted ? MUTE_ON : MUTE_OFF;
-        const results = await Promise.allSettled(
-            [...this._muteChars.keys()].map(proxy => writeValue(proxy, [value])));
-        const failed = results.filter(r => r.status === 'rejected');
-        if (failed.length > 0) {
-            console.warn(`hearing-aid-presets: mute refusé (${failed[0].reason.message})`);
-            Main.notify('Aides auditives',
-                'Impossible de changer les micros. bluetoothd tourne-t-il avec --noplugin=micp ?');
-            this._manager.onMuteChanged(this);   // remet l'interrupteur dans l'état réel
+        if (parts.length > 0) {
+            this.displayName = parts.join(' ');
+            console.log(`hearing-aid-presets: model ${this.displayName}`);
+            this._manager.onAliasChanged(this);
         }
     }
 
@@ -297,8 +238,8 @@ class HearingDevice {
         this._collected = new Map();
         this._pendingRead = new Promise(resolve => {
             this._resolveRead = resolve;
-            // L'aide répond par une indication par preset ; si la dernière
-            // n'arrive jamais, on livre ce qu'on a au bout de 5 s.
+            // The aid answers with one indication per preset; if the last one
+            // never shows up, deliver what we have after 5 s.
             this._readTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 5000, () => {
                 this._readTimeout = 0;
                 this._finishRead();
@@ -320,7 +261,7 @@ class HearingDevice {
         if (!this._pendingRead)
             return;
         this.presets = this._collected;
-        console.log(`hearing-aid-presets: ${this.alias} : ${this.presets.size} programmes, actif ${this.active}`);
+        console.log(`hearing-aid-presets: ${this.alias}: ${this.presets.size} programs, active ${this.active}`);
         const resolve = this._resolveRead;
         this._pendingRead = null;
         this._resolveRead = null;
@@ -341,8 +282,8 @@ class HearingDevice {
             if (isLast)
                 this._finishRead();
         } else if (opcode === OP_PRESET_CHANGED) {
-            // Liste modifiée sur l'aide (app du téléphone, audioprothésiste) :
-            // on relit tout plutôt que d'appliquer le delta.
+            // The list changed on the aid (phone app, audiologist): re-read
+            // everything rather than applying the delta.
             if (bytes[2] === 1)
                 this.readPresets();
         }
@@ -357,9 +298,9 @@ class HearingDevice {
     }
 
     async setActive(index) {
-        // 0x08 = Set Active Preset, Synchronized Locally : l'aide propage à
-        // l'autre oreille. Les Vivia refusent 0x05 (ATT 0x80), d'autres
-        // modèles sans synchro refusent 0x08, d'où le repli.
+        // 0x08 = Set Active Preset, Synchronized Locally: the aid forwards it
+        // to the other ear. ReSound Vivia refuse 0x05 (ATT 0x80); aids without
+        // synchronisation refuse 0x08, hence the fallback.
         const first = (this.features & FEATURE_PRESET_SYNC) ? OP_SET_ACTIVE_SYNC : OP_SET_ACTIVE;
         const second = first === OP_SET_ACTIVE_SYNC ? OP_SET_ACTIVE : OP_SET_ACTIVE_SYNC;
         try {
@@ -368,8 +309,8 @@ class HearingDevice {
             try {
                 await writeValue(this._cp, [second, index]);
             } catch (e2) {
-                console.warn(`hearing-aid-presets: changement de programme refusé (${e2.message})`);
-                Main.notify('Aides auditives', 'Changement de programme refusé par l\'aide.');
+                console.warn(`hearing-aid-presets: program change refused (${e2.message})`);
+                Main.notify(_('Hearing aids'), _('The hearing aid refused the program change.'));
             }
         }
     }
@@ -378,23 +319,20 @@ class HearingDevice {
         for (const [proxy, id] of this._signals)
             proxy.disconnect(id);
         this._signals = [];
-        for (const [proxy, entry] of this._muteChars)
-            proxy.disconnect(entry.signal);
         if (this._readTimeout) {
             GLib.source_remove(this._readTimeout);
             this._readTimeout = 0;
         }
         this._pendingRead = null;
-        for (const proxy of [this._cp, this._activeChar, ...this._muteChars.keys()]) {
+        for (const proxy of [this._cp, this._activeChar]) {
             proxy.call('StopNotify', null, Gio.DBusCallFlags.NONE, -1, null, (p, res) => {
                 try {
                     p.call_finish(res);
                 } catch (e) {
-                    // L'aide est souvent déjà partie à ce stade.
+                    // The aid is usually gone already at this point.
                 }
             });
         }
-        this._muteChars.clear();
     }
 }
 
@@ -412,7 +350,7 @@ export default class HearingAidPresetsExtension extends Extension {
                 try {
                     this._manager = Gio.DBusObjectManagerClient.new_for_bus_finish(res);
                 } catch (e) {
-                    console.error(`hearing-aid-presets: BlueZ injoignable (${e.message})`);
+                    console.error(`hearing-aid-presets: cannot reach BlueZ (${e.message})`);
                     return;
                 }
                 for (const signal of ['object-added', 'object-removed',
@@ -448,7 +386,7 @@ export default class HearingAidPresetsExtension extends Extension {
         this._dropDevice();
     }
 
-    // BlueZ ajoute les objets GATT un par un ; on attend que ça se calme.
+    // BlueZ adds GATT objects one by one; wait for the burst to settle.
     _scheduleRescan() {
         if (this._rescanId)
             GLib.source_remove(this._rescanId);
@@ -459,7 +397,7 @@ export default class HearingAidPresetsExtension extends Extension {
         });
     }
 
-    _isConnected(devicePath) {
+    _connectedDevice(devicePath) {
         const obj = this._manager.get_object(devicePath);
         const dev = obj && obj.get_interface(IFACE_DEVICE);
         if (!dev)
@@ -469,16 +407,15 @@ export default class HearingAidPresetsExtension extends Extension {
     }
 
     _findDevices() {
-        const services = new Map();   // service path -> uuid (HAS ou MICS)
-        const hasChars = new Map();   // device path -> { controlPoint, activeIndex, features }
-        const muteChars = [];
+        const services = new Map();   // service path -> uuid (HAS or DIS)
+        const chars = new Map();      // device path -> { controlPoint, activeIndex, features, manufacturer, model }
         const objects = this._manager.get_objects();
         for (const obj of objects) {
             const service = obj.get_interface(IFACE_SERVICE);
             if (!service)
                 continue;
             const uuid = propString(service, 'UUID');
-            if (uuid === UUID_HAS || uuid === UUID_MICS)
+            if (uuid === UUID_HAS || uuid === UUID_DIS)
                 services.set(obj.get_object_path(), uuid);
         }
         for (const obj of objects) {
@@ -486,45 +423,37 @@ export default class HearingAidPresetsExtension extends Extension {
             if (!ch)
                 continue;
             const servicePath = propString(ch, 'Service');
-            const serviceUuid = services.get(servicePath);
-            if (!serviceUuid)
+            if (!services.has(servicePath))
                 continue;
             const devicePath = servicePath.replace(/\/service[0-9a-f]+$/, '');
-            const uuid = propString(ch, 'UUID');
-            if (serviceUuid === UUID_MICS) {
-                if (uuid === UUID_MUTE && this._isConnected(devicePath))
-                    muteChars.push(ch);
-                continue;
-            }
-            const entry = hasChars.get(devicePath) || {};
-            switch (uuid) {
+            const entry = chars.get(devicePath) || {};
+            switch (propString(ch, 'UUID')) {
             case UUID_CONTROL_POINT: entry.controlPoint = ch; break;
             case UUID_ACTIVE_INDEX: entry.activeIndex = ch; break;
             case UUID_FEATURES: entry.features = ch; break;
+            case UUID_MANUFACTURER: entry.manufacturer = ch; break;
+            case UUID_MODEL: entry.model = ch; break;
             }
-            hasChars.set(devicePath, entry);
+            chars.set(devicePath, entry);
         }
         const usable = [];
-        for (const [path, chars] of hasChars) {
-            if (!chars.controlPoint || !chars.activeIndex || !chars.features)
+        for (const [path, entry] of chars) {
+            if (!entry.controlPoint || !entry.activeIndex || !entry.features)
                 continue;
-            const dev = this._isConnected(path);
+            const dev = this._connectedDevice(path);
             if (dev)
-                usable.push({ path, dev, chars });
+                usable.push({ path, dev, chars: entry });
         }
-        return { usable, muteChars };
+        return usable;
     }
 
     _rescan() {
         if (!this._manager)
             return;
-        const { usable, muteChars } = this._findDevices();
+        const usable = this._findDevices();
         if (this._device) {
-            if (usable.some(u => u.path === this._device.path)) {
-                this._device.setMuteChars(muteChars).catch(e =>
-                    console.warn(`hearing-aid-presets: mute (${e.message})`));
+            if (usable.some(u => u.path === this._device.path))
                 return;
-            }
             this._dropDevice();
         }
         if (usable.length === 0)
@@ -533,11 +462,9 @@ export default class HearingAidPresetsExtension extends Extension {
         this._device = new HearingDevice(this, path, dev, chars);
         this._indicator = new Indicator(this, this._device);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
-        console.log(`hearing-aid-presets: indicateur créé pour ${path}, ${muteChars.length} micro(s)`);
+        console.log(`hearing-aid-presets: indicator created for ${path}`);
         this._device.start().catch(e =>
-            console.error(`hearing-aid-presets: démarrage (${e.message})`));
-        this._device.setMuteChars(muteChars).catch(e =>
-            console.warn(`hearing-aid-presets: mute (${e.message})`));
+            console.error(`hearing-aid-presets: start (${e.message})`));
     }
 
     _dropDevice() {
@@ -561,10 +488,8 @@ export default class HearingAidPresetsExtension extends Extension {
             this._indicator.setActive(device.active);
     }
 
-    onMuteChanged(device) {
-        if (this._indicator && device === this._device) {
-            this._indicator.setMute(device.mute);
-            console.log(`hearing-aid-presets: micros ${device.mute === MUTE_ON ? 'coupés' : 'actifs'} (${device.mute})`);
-        }
+    onAliasChanged(device) {
+        if (this._indicator && device === this._device)
+            this._indicator.setAlias(device.alias);
     }
 }

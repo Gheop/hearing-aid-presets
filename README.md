@@ -51,16 +51,7 @@ KernelExperimental = 6fbaf188-05e0-496a-9885-d6ddfdb4e03e
 
 The first line turns on the LE Audio profiles. The second enables the kernel ISO socket; without it bluetoothd logs `BAP requires ISO Socket which is not enabled` and only the ASHA profile shows up. See `bluetooth/main.conf.snippet`.
 
-Then keep bluetoothd's built-in `micp` plugin out of the way, otherwise it claims the microphone Mute characteristic and the extension gets `Operation Not Authorized` when toggling it:
-
-```sh
-sudo mkdir -p /etc/systemd/system/bluetooth.service.d
-sudo cp bluetooth/noplugin-micp.conf /etc/systemd/system/bluetooth.service.d/
-sudo systemctl daemon-reload
-sudo systemctl restart bluetooth
-```
-
-(`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
+Then `sudo systemctl restart bluetooth`.
 
 ### 2. User side
 
@@ -87,7 +78,7 @@ Pair both aids once with the GNOME Bluetooth panel or `bluetoothctl` (put them i
 
 Pick "Bluetooth – Vivia" (or your alias) as the output in the GNOME sound menu. PipeWire shows one stereo sink; the right aid is grouped into it through the LE Audio coordinated set.
 
-The ear icon in the top bar opens the program list. The checked entry is the active program. A switch labelled "Mic to PC" controls the standard LE Audio microphone mute. Note that on ReSound aids this only mutes the microphone feed sent to the computer (for calls); it does not touch the ambient sound amplification, which is a proprietary function of the manufacturer app.
+The ear icon in the top bar opens the program list. The checked entry is the active program. The header shows the manufacturer and model read from the Device Information Service ("ReSound Vivia 960"), or the device alias when the aid does not provide them. Menu strings are in English with a French translation; add a `po/<lang>.po` for another language and run `msgfmt` as in `install.sh`.
 
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
@@ -103,7 +94,7 @@ BlueZ exports every GATT characteristic of a connected device on D-Bus. The exte
 | Hearing Aid Preset Control Point | 0x2BDB | `0x01` Read Presets, `0x05` Set Active Preset, `0x08` Set Active Preset (synchronised) |
 | Active Preset Index | 0x2BDC | current program, notified on change |
 
-The preset list arrives as one indication per preset (opcode `0x02`). To switch, the extension writes `0x08 <index>` when the aids advertise preset synchronisation (the Vivia refuse the plain `0x05` with ATT error `0x80`), and falls back to `0x05` otherwise. Microphone mute is the Mute characteristic (`0x2BC3`) of the Microphone Control Service (`0x184D`); it is not synchronised between ears, so the extension writes it on every connected aid.
+The preset list arrives as one indication per preset (opcode `0x02`). To switch, the extension writes `0x08 <index>` when the aids advertise preset synchronisation (the Vivia refuse the plain `0x05` with ATT error `0x80`), and falls back to `0x05` otherwise. The header comes from the Device Information Service (`0x180A`): Manufacturer Name String (`0x2A29`) and Model Number String (`0x2A24`), with a small table turning internal codes such as `VI960S-DRWC` into retail names.
 
 No daemon, no polling: everything is driven by D-Bus signals.
 
@@ -112,8 +103,6 @@ No daemon, no polling: everything is driven by D-Bus signals.
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
 
 **One aid shows no GATT objects on D-Bus** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension or battery meters only see the other aid). Seen with BlueZ 5.87 after reconnecting one aid alone: bluetoothd logs `No matching connection for device` and attaches no profile. `sudo systemctl restart bluetooth`, then `connect-hearing-aids`.
-
-**`Operation Not Authorized` when toggling the microphone.** bluetoothd is running without `--noplugin=micp`; check `systemctl show -p ExecStart bluetooth`.
 
 **`BAP requires ISO Socket which is not enabled`** in the bluetoothd journal: the `KernelExperimental` line is missing.
 
@@ -131,12 +120,20 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
 scripts/              connect-hearing-aids
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet and the bluetoothd systemd override
+bluetooth/            main.conf snippet
+po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.1.0 — Model name in the menu, translations (2026-09-04)
+
+- The menu header shows manufacturer and model ("ReSound Vivia 960") instead of the Bluetooth alias of whichever aid is driven.
+- Menu strings translated through gettext; French included.
+- Removed the microphone switch: the LE Audio microphone mute only affects the microphone feed sent to the computer, which PipeWire does not even expose for these aids. This also removes the `--noplugin=micp` bluetoothd override from the setup.
+- Lists of verified hearing aids and Bluetooth controllers in `docs/`.
 
 ### v1.0.0 — First release (2026-09-04)
 

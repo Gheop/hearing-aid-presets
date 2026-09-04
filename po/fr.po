@@ -1,0 +1,23 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: hearing-aid-presets\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Reading programs…"
+msgstr "Lecture des programmes…"
+
+msgid "No programs"
+msgstr "Aucun programme"
+
+msgid "Hearing aid"
+msgstr "Aide auditive"
+
+msgid "Hearing aids"
+msgstr "Aides auditives"
+
+msgid "The hearing aid refused the program change."
+msgstr "L'aide auditive a refusé le changement de programme."
