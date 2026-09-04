@@ -4,6 +4,27 @@ Use LE Audio hearing aids on Linux, and switch their programs from the GNOME top
 
 Tested with a pair of **ReSound Vivia 960** on Fedora 44 (kernel 7.1, BlueZ 5.87, PipeWire 1.6.8, WirePlumber 0.5.14, GNOME 50, Intel AX211). Any hearing aid that implements the Bluetooth LE Audio *Hearing Access Service* (HAS) should work with the extension; the setup notes apply to any LE Audio device.
 
+## Compatible devices
+
+Tested here: **ReSound Vivia 960**, binaural pair (four programs, preset synchronisation, microphone control). The same GN platform is sold under several names, so these should behave identically:
+
+- ReSound Vivia, ReSound Nexia, ReSound Savi
+- Jabra Enhance Pro 20, Jabra Enhance Select 500
+- Beltone Serene, Beltone Envision
+
+Any hearing aid advertised as **Bluetooth LE Audio** or **Auracast** capable implements the same standard services (BAP for audio, HAS for programs, VCS/MICS for volume and microphone), so the setup and the extension should apply. Manufacturers listing LE Audio support at the time of writing, none of them tested by us:
+
+- Oticon Intent
+- Phonak Audéo Infinio and Sphere Infinio, Unitron Vivante
+- Starkey Genesis AI, Edge AI
+- Signia Integrated Xperience (IX), Rexton Reach
+- Widex Allure
+- Cochlear Nucleus 8 sound processor
+
+If you try one, open an issue with `bluetoothctl info <MAC>` and the program list you get: that is the only way this list gets better. Aids that only speak ASHA (older Android streaming) are not covered, see [Alternatives](#alternatives).
+
+Keywords, for the search engines: Bluetooth LE Audio hearing aids on Linux, Auracast, HAP, HAS presets, LC3, BlueZ, PipeWire, WirePlumber, Fedora, GNOME Shell extension.
+
 What you get:
 
 - Stereo LC3 streaming from PipeWire to both aids, through the standard BlueZ + PipeWire stack. No third-party daemon.
