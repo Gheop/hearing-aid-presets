@@ -82,6 +82,8 @@ Pick "Bluetooth – Vivia" (or your alias) as the output in the GNOME sound menu
 
 The ear icon in the top bar opens the program list. The checked entry is the active program. The header shows the manufacturer and model read from the Device Information Service ("ReSound Vivia 960"), or the device alias when the aid does not provide them. Menu strings are in English with a French translation; add a `po/<lang>.po` for another language and run `msgfmt` as in `install.sh`.
 
+Battery levels: bluetoothd does not publish `org.bluez.Battery1` for these aids (it logs `More than one BATT service exists for this device` and gives up), so the GNOME Bluetooth panel shows nothing. The [Bluetooth Battery Meter](https://extensions.gnome.org/extension/6670/bluetooth-battery-meter/) extension reads the Battery Level characteristic straight from GATT and shows one entry per aid, as long as BlueZ exports their GATT objects (see Troubleshooting when only one aid appears).
+
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
 Hearing aids accept a single central at a time. While they are connected to your phone, the computer cannot connect. Turn off the phone's Bluetooth, or disconnect the aids from it, before connecting here.
