@@ -21,7 +21,7 @@ Any hearing aid advertised as **Bluetooth LE Audio** or **Auracast** capable imp
 - Widex Allure
 - Cochlear Nucleus 8 sound processor
 
-If you try one, open an issue with `bluetoothctl info <MAC>` and the program list you get: that is the only way this list gets better. Aids that only speak ASHA (older Android streaming) are not covered, see [Alternatives](#alternatives).
+The full lists, with what was checked and how to report yours, live in [docs/DEVICES.md](docs/DEVICES.md) (hearing aids) and [docs/CONTROLLERS.md](docs/CONTROLLERS.md) (Bluetooth adapters that do or do not support LE Audio). If you try one, open an issue with `bluetoothctl info <MAC>` and the program list you get: that is the only way these lists get better. Aids that only speak ASHA (older Android streaming) are not covered, see [Alternatives](#alternatives).
 
 Keywords, for the search engines: Bluetooth LE Audio hearing aids on Linux, Auracast, HAP, HAS presets, LC3, BlueZ, PipeWire, WirePlumber, Fedora, GNOME Shell extension.
 
@@ -33,7 +33,7 @@ What you get:
 
 ## Requirements
 
-- A Bluetooth controller that supports LE Audio. Check with `sudo btmgmt info`: the `supported settings` line must contain `cis-central`. Intel AX2xx cards do; many cheap "Bluetooth 5.3" USB dongles (Realtek, Actions) do not, whatever the box says.
+- A Bluetooth controller that supports LE Audio. Check with `sudo btmgmt info`: the `supported settings` line must contain `cis-central`. Intel AX2xx cards do; many cheap "Bluetooth 5.3" USB dongles (Realtek, Actions) do not, whatever the box says. See [docs/CONTROLLERS.md](docs/CONTROLLERS.md).
 - BlueZ 5.77 or later, PipeWire 1.6 or later, a kernel with ISO socket support (6.x is fine).
 - GNOME Shell 50 for the extension (the `shell-version` field in `extension/metadata.json` is easy to widen if you test on 46 to 49).
 - Hearing aids that advertise the LE Audio services. `bluetoothctl info <MAC>` should list `Audio Stream Control`, `Published Audio Capabilities`, `Common Audio` and `Hearing Aid`.
@@ -132,6 +132,7 @@ extension/            GNOME Shell extension (metadata.json, extension.js, icons/
 scripts/              connect-hearing-aids
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet and the bluetoothd systemd override
+docs/                 verified hearing aids and Bluetooth controllers
 install.sh            installs the user-side pieces
 ```
 
