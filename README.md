@@ -152,6 +152,10 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.1 — Left and right stay labelled (2026-09-05)
+
+- Battery and volume rows showed the Bluetooth aliases ("Vivia R", "Vivia") instead of Left/Right when the aids reconnected: the side comes from the BAP endpoint, which BlueZ creates a moment after the battery and volume characteristics, and the labels were frozen at first sight. They now follow every rescan.
+
 ### v1.3.0 — Audit follow-up: checks, cleanup, faster connect (2026-09-05)
 
 - The program list is re-read every time the menu opens, after one aid answered a read with a single program and the menu stayed wrong for an hour. Control point frames are logged at debug level to diagnose the next occurrence.

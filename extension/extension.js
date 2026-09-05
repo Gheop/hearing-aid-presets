@@ -189,10 +189,13 @@ class HearingAidIndicator extends PanelMenu.Button {
 
     // volumes: [{ key, label, volume }], one per aid exposing VCS, left first
     setVolumes(volumes) {
-        const keys = new Set(volumes.map(v => v.key));
-        for (const [key, entry] of [...this._sliders]) {
-            if (!keys.has(key))
+        // Labels and order can change after creation (side known later), and
+        // menu items cannot be reordered in place: rebuild the sliders then.
+        const layout = volumes.map(v => `${v.key}=${v.label}`).join('\n');
+        if (layout !== this._sliderLayout) {
+            for (const [key, entry] of [...this._sliders])
                 this._dropSlider(key, entry);
+            this._sliderLayout = layout;
         }
         for (const { key, label, volume } of volumes) {
             let entry = this._sliders.get(key);
@@ -347,8 +350,14 @@ class HearingDevice {
         }
         for (const { char, label, order } of entries) {
             const path = char.get_object_path();
-            if (this._batteries.has(path))
+            const known = this._batteries.get(path);
+            if (known) {
+                // The BAP endpoint, hence the side, often shows up a rescan
+                // or two after the characteristic: keep the label current.
+                known.label = label;
+                known.order = order;
                 continue;
+            }
             const entry = { proxy: char, label, order, percent: null, signal: 0 };
             entry.signal = char.connect('g-properties-changed', (p, changed) => {
                 const bytes = valueBytes(changed);
@@ -383,8 +392,12 @@ class HearingDevice {
             this._volumes.delete(path);
         }
         for (const { path, state, cp, label, order } of entries) {
-            if (this._volumes.has(path))
+            const known = this._volumes.get(path);
+            if (known) {
+                known.label = label;
+                known.order = order;
                 continue;
+            }
             const entry = { state, cp, label, order, volume: null, counter: 0, signal: 0 };
             entry.signal = state.connect('g-properties-changed', (p, changed) => {
                 const bytes = valueBytes(changed);
