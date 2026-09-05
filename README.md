@@ -63,6 +63,16 @@ sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 ```
 
+Last, keep the login screen's own WirePlumber away from Bluetooth. GDM starts one a second after bluetoothd, before your session; the aids reconnect at once, that WirePlumber negotiates LE Audio with them and leaves a stale ISO group in the controller, which is what makes every stream fail with `Device or resource busy` after a reboot until the adapter is power-cycled:
+
+```sh
+sudo install -d -o gdm -g gdm /var/lib/gdm/.config/wireplumber/wireplumber.conf.d
+sudo install -o gdm -g gdm -m 644 bluetooth/gdm-no-bluetooth.conf \
+    /var/lib/gdm/.config/wireplumber/wireplumber.conf.d/51-disable-bluetooth.conf
+```
+
+Effective at the next boot. (Fedora's greeter runs as `gdm` with `/var/lib/gdm` as home.)
+
 The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distributions that ship it elsewhere (`systemctl show -p ExecStart bluetooth` tells), edit the path in the copied file first.
 
 The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
@@ -122,7 +132,7 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
 
-**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)` or `Connection timed out (110)`. Seen after a reboot when PipeWire first created two sinks for the pair instead of one coordinated set: each half allocated an ISO group in the controller, and the stale one blocks every later stream, surviving reconnects and even a bluetoothd restart. Only powering the adapter off and on clears it. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
+**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)` or `Connection timed out (110)`, and `bt_bap_stream_get_qos_links: failed` a few seconds after boot. The login screen's WirePlumber took the aids before your session (see the `gdm-no-bluetooth.conf` step in Installation), or PipeWire once created two sinks for the pair instead of one coordinated set; either way a stale ISO group sits in the controller and blocks every later stream, surviving reconnects and even a bluetoothd restart. Only powering the adapter off and on clears it. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
 
 **One aid shows no GATT objects on D-Bus** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension or battery meters only see the other aid). Seen with BlueZ 5.87 after reconnecting one aid alone: bluetoothd logs `No matching connection for device` and attaches no profile. `sudo systemctl restart bluetooth`, then `connect-hearing-aids`.
 
@@ -144,13 +154,17 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
 scripts/              connect-hearing-aids, check (static checks run by CI)
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet and the bluetoothd systemd override
+bluetooth/            main.conf snippet, bluetoothd systemd override, GDM WirePlumber config
 po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.3 — Keep the login screen's WirePlumber off Bluetooth (2026-09-05)
+
+- New `bluetooth/gdm-no-bluetooth.conf`, to install for the `gdm` user: the greeter's WirePlumber was negotiating LE Audio with the aids before the user session and leaving a stale ISO group in the controller, the root cause of "Device or resource busy" after every reboot. With it in place the adapter power cycle should no longer be needed.
 
 ### v1.3.2 — Stream probe catches the 30 s retry cycle (2026-09-05)
 
