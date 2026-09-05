@@ -63,6 +63,8 @@ sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 ```
 
+The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distributions that ship it elsewhere (`systemctl show -p ExecStart bluetooth` tells), edit the path in the copied file first.
+
 The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
 
 ### 2. User side
@@ -93,6 +95,8 @@ Pick "Bluetooth – Vivia" (or your alias) as the output in the GNOME sound menu
 The ear icon in the top bar opens the menu: battery level of each ear, one volume slider per ear, then the program list where the checked entry is the active program. The volume sliders drive the aids' own volume (what the buttons on the aids and the phone app change), independently for each ear; they follow changes made elsewhere. The header shows the manufacturer and model read from the Device Information Service ("ReSound Vivia 960"), or the device alias when the aid does not provide them. Menu strings are in English with a French translation; add a `po/<lang>.po` for another language and run `msgfmt` as in `install.sh`.
 
 Battery levels come straight from each aid's Battery Level characteristic; bluetoothd itself does not publish `org.bluez.Battery1` for these aids (it logs `More than one BATT service exists for this device` and gives up), so the GNOME Bluetooth panel shows nothing.
+
+The script sources `~/.config/hearing-aids/devices.conf` as shell, and reads the bluetoothd journal to check the stream: if your user cannot read the system journal, it says so and skips that check (add yourself to the `systemd-journal` group to enable it).
 
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 

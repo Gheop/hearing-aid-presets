@@ -53,12 +53,7 @@ fi
 
 # Enable the extension for the next session (GNOME only loads new extensions
 # at login).
-current="$(gsettings get org.gnome.shell enabled-extensions)"
-case "$current" in
-    *"$UUID"*) ;;
-    "@as []") gsettings set org.gnome.shell enabled-extensions "['$UUID']" ;;
-    *) gsettings set org.gnome.shell enabled-extensions "${current%]}, '$UUID']" ;;
-esac
+gnome-extensions enable "$UUID"
 
 cat <<EOF
 

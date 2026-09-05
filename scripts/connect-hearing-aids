@@ -29,10 +29,16 @@ fi
 LEFT_ALIAS="${LEFT_ALIAS:-}"
 RIGHT_ALIAS="${RIGHT_ALIAS:-}"
 
+# D-Bus path of a device, whatever adapter it is paired with.
+device_path() {
+    busctl tree org.bluez --list 2>/dev/null | grep -m1 "/dev_${1//:/_}\$"
+}
+
 set_alias() {
-    local mac="$1" name="$2"
+    local mac="$1" name="$2" path
     [ -n "$name" ] || return 0
-    local path="/org/bluez/hci0/dev_${mac//:/_}"
+    path="$(device_path "$mac")"
+    [ -n "$path" ] || return 0
     busctl call org.bluez "$path" org.freedesktop.DBus.Properties Set ssv \
         org.bluez.Device1 Alias s "$name" 2>/dev/null
 }
@@ -95,11 +101,22 @@ pair_sinks() {
     pactl list sinks short 2>/dev/null | grep -cE "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\."
 }
 
+# The stream probe reads the system journal; without access to it, no error
+# would ever be seen and the probe would always pass.
+if ! journalctl -u bluetooth -n 1 --quiet > /dev/null 2>&1; then
+    echo "Cannot read the system journal (add yourself to the systemd-journal group): the stream check is disabled." >&2
+    JOURNAL_OK=0
+else
+    JOURNAL_OK=1
+fi
+
 # Play one second of silence and look for ISO connection failures in the
 # bluetoothd journal. A stale ISO group in the controller survives reconnects
 # and even a bluetoothd restart; only powering the adapter off and on clears it.
+# Inconclusive (passes) when the journal is not readable.
 stream_ok() {
     local sink since
+    [ "$JOURNAL_OK" = 1 ] || return 0
     sink="$(pactl list sinks short 2>/dev/null | grep -E "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\." | head -1 | awk '{print $2}')"
     [ -n "$sink" ] || return 1
     since="$(date '+%Y-%m-%d %H:%M:%S')"
