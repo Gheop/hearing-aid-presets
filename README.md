@@ -148,7 +148,7 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 ## Reporting the stale ISO group upstream
 
-The "busy" after boot is a BlueZ or kernel bug: an LE Audio device connected before any BAP endpoint exists leaves an ISO group in the controller that no disconnect clears. It has not been reported upstream yet; a report needs an HCI trace from boot. `scripts/capture-iso-busy` does the system side:
+The "busy" after boot is a BlueZ or kernel bug: an LE Audio device connected before any BAP endpoint exists leaves an ISO group in the controller that no disconnect clears. It is reported as [bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496), with an HCI trace from boot; add your own trace there if you hit it with another controller or device. `scripts/capture-iso-busy` does the system side:
 
 ```sh
 echo 'RESET_ON_BOOT=no' >> ~/.config/hearing-aids/devices.conf   # let the bug happen
