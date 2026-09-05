@@ -147,7 +147,7 @@ stream_ok() {
 }
 
 power_cycle() {
-    echo "Resetting the Bluetooth adapter to clear stale ISO groups..."
+    echo "Resetting the Bluetooth adapter..."
     bluetoothctl power off > /dev/null 2>&1
     sleep 3
     RESET_AT="$(date '+%Y-%m-%d %H:%M:%S')"
@@ -157,8 +157,26 @@ power_cycle() {
     wait_for bap_ok 15 || true
 }
 
-echo "Connecting hearing aids..."
-connect_both
+# Trusted aids reconnect the moment bluetoothd starts, long before the user
+# session's WirePlumber exists. That first connection leaves an ISO group in
+# the controller that no disconnect clears, and the first stream after login
+# fails with "Device or resource busy". Resetting the adapter once per boot,
+# before connecting, makes the aids connect with WirePlumber already there.
+BOOT_STAMP="${XDG_CACHE_HOME:-$HOME/.cache}/hearing-aids/boot_id"
+first_run_since_boot() {
+    local boot_id
+    boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" || return 1
+    [ "$(cat "$BOOT_STAMP" 2>/dev/null)" != "$boot_id" ] || return 1
+    mkdir -p "$(dirname "$BOOT_STAMP")" && echo "$boot_id" > "$BOOT_STAMP"
+}
+
+if first_run_since_boot; then
+    echo "First run since boot: resetting the adapter so the aids connect after WirePlumber..."
+    power_cycle
+else
+    echo "Connecting hearing aids..."
+    connect_both
+fi
 
 finish() {
     if [ "$(pair_sinks)" -gt 1 ]; then

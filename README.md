@@ -108,6 +108,8 @@ Battery levels come straight from each aid's Battery Level characteristic; bluet
 
 The script sources `~/.config/hearing-aids/devices.conf` as shell, and reads the bluetoothd journal to check the stream: if your user cannot read the system journal, it says so and skips that check (add yourself to the `systemd-journal` group to enable it).
 
+On the first run after a boot, the script resets the Bluetooth adapter before connecting: bluetoothd reconnects trusted aids seconds after it starts, before your session's WirePlumber exists, and that early connection leaves an ISO group in the controller that makes the first stream fail with `Device or resource busy`. The reset costs about 7 s of Bluetooth right after login (a Bluetooth keyboard or mouse blinks too) and makes the aids connect with WirePlumber already listening. Later runs skip it.
+
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
 Hearing aids accept a single central at a time. While they are connected to your phone, the computer cannot connect. Turn off the phone's Bluetooth, or disconnect the aids from it, before connecting here.
@@ -161,6 +163,10 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.5 — Adapter reset on the first run after boot (2026-09-05)
+
+- `connect-hearing-aids` resets the adapter once per boot before connecting, instead of connecting, failing the stream check and resetting then. The aids were reconnecting to bluetoothd before the session's WirePlumber existed, and that first connection is what left the stale ISO group behind. Login path shortened by about 20 s, and no more "busy" on the first stream.
 
 ### v1.3.4 — Stream probe ignores errors from before the adapter reset (2026-09-05)
 
