@@ -147,6 +147,14 @@ class HearingAidIndicator extends PanelMenu.Button {
         this._section = new PopupMenu.PopupMenuSection();
         this.menu.addMenuItem(this._section);
         this._section.addMenuItem(new PopupMenu.PopupMenuItem(_('Reading programs…'), { reactive: false }));
+
+        // An aid once answered Read Presets with a single entry flagged as
+        // last, and nothing re-read the list for an hour. One write and a
+        // few indications per menu opening is cheap insurance.
+        this._openId = this.menu.connect('open-state-changed', (menu, open) => {
+            if (open)
+                this._device.readPresets().catch(() => {});
+        });
     }
 
     setPresets(presets, active) {
@@ -235,6 +243,10 @@ class HearingAidIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        if (this._openId) {
+            this.menu.disconnect(this._openId);
+            this._openId = 0;
+        }
         for (const [key, entry] of [...this._sliders])
             this._dropSlider(key, entry);
         super.destroy();
@@ -419,6 +431,11 @@ class HearingDevice {
             await writeValue(entry.cp, [VCS_SET_ABSOLUTE_VOLUME, entry.counter, volume]);
         } catch (e) {
             console.warn(`hearing-aid-presets: volume write refused (${e.message})`);
+            // VCS 1.0, section 3.1.2: a stale change counter (a missed Volume
+            // State notification) is refused with ATT 0x80. Re-read the
+            // state and retry once before blaming the bluetoothd plugin.
+            if (await this._retryVolume(entry, volume))
+                return;
             if (!this._volumeWarned) {
                 this._volumeWarned = true;
                 Main.notify(_('Hearing aids'),
@@ -432,6 +449,19 @@ class HearingDevice {
                 entry.next = undefined;
                 this.setVolume(key, next);
             }
+        }
+    }
+
+    async _retryVolume(entry, volume) {
+        try {
+            const bytes = await readValue(entry.state);
+            if (bytes.length >= 3)
+                [entry.volume, , entry.counter] = bytes;
+            await writeValue(entry.cp, [VCS_SET_ABSOLUTE_VOLUME, entry.counter, volume]);
+            return true;
+        } catch (e) {
+            console.warn(`hearing-aid-presets: volume retry refused (${e.message})`);
+            return false;
         }
     }
 
@@ -502,17 +532,18 @@ class HearingDevice {
 
     _onControlPoint(changed) {
         const bytes = valueBytes(changed);
-        if (!bytes || bytes.length < 4)
+        if (!bytes)
             return;
+        console.debug(`hearing-aid-presets: control point <- ${bytes.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
         const opcode = bytes[0];
-        if (opcode === OP_READ_PRESET_RESPONSE) {
+        if (opcode === OP_READ_PRESET_RESPONSE && bytes.length >= 4) {
             const [, isLast, index, properties] = bytes;
             const name = new TextDecoder().decode(new Uint8Array(bytes.slice(4)));
             if (this._collected)
                 this._collected.set(index, { name, available: (properties & PROP_AVAILABLE) !== 0 });
             if (isLast)
                 this._finishRead();
-        } else if (opcode === OP_PRESET_CHANGED) {
+        } else if (opcode === OP_PRESET_CHANGED && bytes.length >= 3) {
             // The list changed on the aid (phone app, audiologist): re-read
             // everything rather than applying the delta.
             if (bytes[2] === 1)
