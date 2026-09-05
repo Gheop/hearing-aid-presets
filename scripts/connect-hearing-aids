@@ -29,6 +29,7 @@ fi
 : "${RIGHT:?RIGHT= missing in $CONFIG}"
 LEFT_ALIAS="${LEFT_ALIAS:-}"
 RIGHT_ALIAS="${RIGHT_ALIAS:-}"
+RESET_AT=""
 
 # D-Bus path of a device, whatever adapter it is paired with.
 device_path() {
@@ -132,8 +133,12 @@ stream_ok() {
     sink="$(pactl list sinks short 2>/dev/null | grep -E "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\." | head -1 | awk '{print $2}')"
     [ -n "$sink" ] || return 1
     # When something is already playing, bluetoothd retries the ISO connect
-    # every 30 s: a failure from the last cycle counts too.
+    # every 30 s: a failure from the last cycle counts too, but nothing from
+    # before the last adapter reset does.
     since="$(date -d '-35 seconds' '+%Y-%m-%d %H:%M:%S')"
+    if [ -n "$RESET_AT" ] && [ "$RESET_AT" \> "$since" ]; then
+        since="$RESET_AT"
+    fi
     timeout 6 pw-play --raw --format=s16 --rate=48000 --channels=2 --target="$sink" /dev/zero > /dev/null 2>&1 &
     sleep 4
     kill %% 2>/dev/null
@@ -145,6 +150,7 @@ power_cycle() {
     echo "Resetting the Bluetooth adapter to clear stale ISO groups..."
     bluetoothctl power off > /dev/null 2>&1
     sleep 3
+    RESET_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     bluetoothctl power on > /dev/null 2>&1
     sleep 4
     connect_both

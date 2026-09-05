@@ -162,6 +162,10 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.4 — Stream probe ignores errors from before the adapter reset (2026-09-05)
+
+- After a power cycle, `connect-hearing-aids` reported "still failing" because its 35 s look-back into the journal caught the very error that triggered the reset. The probe now starts at the reset when one happened.
+
 ### v1.3.3 — Keep the login screen's WirePlumber off Bluetooth (2026-09-05)
 
 - New `bluetooth/gdm-no-bluetooth.conf`, to install for the `gdm` user: the greeter's WirePlumber was negotiating LE Audio with the aids before the user session and leaving a stale ISO group in the controller, the root cause of "Device or resource busy" after every reboot. With it in place the adapter power cycle should no longer be needed.
