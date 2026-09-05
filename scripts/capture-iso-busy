@@ -74,7 +74,8 @@ collect() {
     journalctl -b -u bluetooth -o short-precise > "$out/bluetoothd.log"
     journalctl -b -o short-precise _COMM=wireplumber _COMM=pipewire > "$out/pipewire.log" 2>/dev/null || true
     journalctl -b -o short-precise > "$out/full-journal.log"
-    for m in $(sed -n 's/^\(LEFT\|RIGHT\)=\(.*\)/\2/p' "$home/.config/hearing-aids/devices.conf" 2>/dev/null); do
+    sed -n 's/^\(LEFT\|RIGHT\)=\(.*\)/\2/p' "$home/.config/hearing-aids/devices.conf" 2>/dev/null |
+    while read -r m; do
         { echo "## $m"; bluetoothctl info "$m"; echo; } >> "$out/devices.txt" 2>&1 || true
     done
     journalctl -b -o short-precise "_UID=$(id -u "$user")" > "$out/user-journal.log" 2>/dev/null || true
