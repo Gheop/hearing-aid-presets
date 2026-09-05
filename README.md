@@ -112,6 +112,8 @@ On the first run after a boot, the script resets the Bluetooth adapter before co
 
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
+**Sound arrives a second after the video starts.** WirePlumber suspends the sink after 5 s of silence and BlueZ closes the ISO streams; the next sound waits for `LE Create CIS` on both aids (0.9 s measured here) before anything is heard. `bluetooth/wireplumber-suspend.conf.example` is a WirePlumber rule that keeps the stream open for 300 s instead: copy it to `~/.config/wireplumber/wireplumber.conf.d/` with your aids' addresses, restart WirePlumber, run `connect-hearing-aids`. The aids then decode an empty stream for 5 minutes after every silence, which costs battery; lower the value if that shows.
+
 Hearing aids accept a single central at a time. While they are connected to your phone, the computer cannot connect. Turn off the phone's Bluetooth, or disconnect the aids from it, before connecting here.
 
 ## How it works
@@ -169,13 +171,17 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
 scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet, bluetoothd systemd override, GDM WirePlumber config
+bluetooth/            main.conf snippet, bluetoothd systemd override, GDM and suspend WirePlumber configs
 po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.7 — Optional WirePlumber rule against the resume delay (2026-09-05)
+
+- `bluetooth/wireplumber-suspend.conf.example`: keeps the LE Audio stream open for 300 s of silence instead of 5, so sound starts with the video instead of a second later. Optional, costs battery; documented in Using it.
 
 ### v1.3.6 — Capture script for the upstream report (2026-09-05)
 

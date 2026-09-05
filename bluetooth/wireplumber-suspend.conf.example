@@ -1,0 +1,25 @@
+# WirePlumber rule to keep the LE Audio stream to the hearing aids open
+# during short silences. Copy to ~/.config/wireplumber/wireplumber.conf.d/
+# (create the directory if needed), replace the address prefix with your
+# aids' addresses (underscores instead of colons), then:
+#   systemctl --user restart wireplumber && connect-hearing-aids
+#
+# WirePlumber suspends a silent sink after 5 s. BlueZ then closes the ISO
+# streams, and the next sound waits about a second for LE Create CIS on both
+# aids before anything is heard. With 300 s, a pause between two videos costs
+# nothing. The price: every silence keeps the aids decoding an empty LC3
+# stream for 5 minutes, which draws far more than an idle connection. Lower
+# the value if the batteries drain faster than you like; 0 means never
+# suspend, not recommended.
+monitor.bluez.rules = [
+  {
+    matches = [
+      { node.name = "~bluez_output\\.CC_89_6C_E0_.*" }
+    ]
+    actions = {
+      update-props = {
+        session.suspend-timeout-seconds = 300
+      }
+    }
+  }
+]
