@@ -112,7 +112,7 @@ The preset list arrives as one indication per preset (opcode `0x02`). To switch,
 
 No daemon, no polling: everything is driven by D-Bus signals.
 
-For development, `gnome-shell --devkit --wayland` runs a second shell in a window against the real BlueZ; with `HEARING_AID_PRESETS_SCREENSHOT=/path/menu.png` in its environment the extension opens its menu and saves the screenshot used above.
+For development, `gnome-shell --devkit --wayland` runs a second shell in a window against the real BlueZ, and `scripts/check` runs the static checks (JS syntax, shellcheck, translations) that CI runs.
 
 ## Troubleshooting
 

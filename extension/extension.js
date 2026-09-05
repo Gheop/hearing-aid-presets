@@ -6,8 +6,8 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import GObject from 'gi://GObject';
+import Clutter from 'gi://Clutter';
 import St from 'gi://St';
-import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -183,10 +183,8 @@ class HearingAidIndicator extends PanelMenu.Button {
     setVolumes(volumes) {
         const keys = new Set(volumes.map(v => v.key));
         for (const [key, entry] of [...this._sliders]) {
-            if (!keys.has(key)) {
-                entry.item.destroy();
-                this._sliders.delete(key);
-            }
+            if (!keys.has(key))
+                this._dropSlider(key, entry);
         }
         for (const { key, label, volume } of volumes) {
             let entry = this._sliders.get(key);
@@ -194,7 +192,7 @@ class HearingAidIndicator extends PanelMenu.Button {
                 const item = new PopupMenu.PopupBaseMenuItem({ activate: false });
                 item.add_child(new St.Label({
                     text: label,
-                    y_align: 2,   // Clutter.ActorAlign.CENTER
+                    y_align: Clutter.ActorAlign.CENTER,
                     style: 'min-width: 4em;',
                 }));
                 const slider = new Slider(0);
@@ -227,6 +225,21 @@ class HearingAidIndicator extends PanelMenu.Button {
         this._volumeSeparator.visible = volumes.length > 0;
     }
 
+    _dropSlider(key, entry) {
+        if (entry.pending) {
+            GLib.source_remove(entry.pending);
+            entry.pending = 0;
+        }
+        entry.item.destroy();
+        this._sliders.delete(key);
+    }
+
+    destroy() {
+        for (const [key, entry] of [...this._sliders])
+            this._dropSlider(key, entry);
+        super.destroy();
+    }
+
     // levels: [{ label, percent }], one per aid, left first
     setBatteries(levels) {
         const known = levels.filter(l => l.percent !== null);
@@ -236,7 +249,7 @@ class HearingAidIndicator extends PanelMenu.Button {
             const cell = new St.BoxLayout({ style: 'spacing: 6px;' });
             cell.add_child(new St.Label({
                 text: label,
-                y_align: 2,   // Clutter.ActorAlign.CENTER
+                y_align: Clutter.ActorAlign.CENTER,
                 style_class: 'popup-subtitle-menu-item',
             }));
             const step = Math.min(100, Math.max(0, Math.round(percent / 10) * 10));
@@ -244,7 +257,7 @@ class HearingAidIndicator extends PanelMenu.Button {
                 icon_name: `battery-level-${step}-symbolic`,
                 style_class: 'popup-menu-icon',
             }));
-            cell.add_child(new St.Label({ text: `${percent} %`, y_align: 2 }));
+            cell.add_child(new St.Label({ text: `${percent} %`, y_align: Clutter.ActorAlign.CENTER }));
             this._batteryBox.add_child(cell);
         }
     }
@@ -509,7 +522,7 @@ class HearingDevice {
 
     _onActiveChanged(changed) {
         const bytes = valueBytes(changed);
-        if (!bytes)
+        if (!bytes || bytes.length < 1)
             return;
         this.active = bytes[0];
         this._manager.onActiveChanged(this);
@@ -541,7 +554,12 @@ class HearingDevice {
             GLib.source_remove(this._readTimeout);
             this._readTimeout = 0;
         }
+        // Release whoever awaits readPresets() without touching the UI: the
+        // manager is dropping this device.
+        if (this._resolveRead)
+            this._resolveRead();
         this._pendingRead = null;
+        this._resolveRead = null;
         for (const entry of this._batteries.values())
             entry.proxy.disconnect(entry.signal);
         for (const entry of this._volumes.values())
@@ -757,7 +775,6 @@ export default class HearingAidPresetsExtension extends Extension {
     onAliasChanged(device) {
         if (this._indicator && device === this._device)
             this._indicator.setAlias(device.alias);
-        this._maybeScreenshot();
     }
 
     onVolumeChanged(device) {
@@ -774,42 +791,5 @@ export default class HearingAidPresetsExtension extends Extension {
             this._indicator.setBatteries(levels);
             console.log(`hearing-aid-presets: battery ${levels.map(l => `${l.label} ${l.percent}`).join(', ')}`);
         }
-    }
-
-    // Development helper, used to produce the README screenshot from a
-    // `gnome-shell --devkit` session: with HEARING_AID_PRESETS_SCREENSHOT set
-    // to a PNG path, open the menu once the model name is known and save the
-    // menu plus the panel above it. Inert otherwise.
-    _maybeScreenshot() {
-        const path = GLib.getenv('HEARING_AID_PRESETS_SCREENSHOT');
-        if (!path || this._screenshotDone || !this._indicator)
-            return;
-        this._screenshotDone = true;
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-            this._indicator.menu.open(false);
-            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
-                const actor = this._indicator.menu.actor;
-                const [x, y] = actor.get_transformed_position();
-                const [w, h] = actor.get_transformed_size();
-                const margin = 24;
-                const left = Math.max(0, Math.floor(x) - margin);
-                const width = Math.ceil(w) + 2 * margin;
-                const height = Math.ceil(y + h) + margin;
-                const stream = Gio.File.new_for_path(path)
-                    .replace(null, false, Gio.FileCreateFlags.NONE, null);
-                const shooter = new Shell.Screenshot();
-                shooter.screenshot_area(left, 0, width, height, stream, (o, res) => {
-                    try {
-                        shooter.screenshot_area_finish(res);
-                        console.log(`hearing-aid-presets: screenshot saved to ${path}`);
-                    } catch (e) {
-                        console.error(`hearing-aid-presets: screenshot failed (${e.message})`);
-                    }
-                    stream.close(null);
-                });
-                return GLib.SOURCE_REMOVE;
-            });
-            return GLib.SOURCE_REMOVE;
-        });
     }
 }
