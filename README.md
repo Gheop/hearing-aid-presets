@@ -152,6 +152,15 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.0 — Audit follow-up: checks, cleanup, faster connect (2026-09-05)
+
+- The program list is re-read every time the menu opens, after one aid answered a read with a single program and the menu stayed wrong for an hour. Control point frames are logged at debug level to diagnose the next occurrence.
+- Volume writes refused by the aid are retried once with a freshly read change counter before blaming the bluetoothd plugin.
+- The extension releases every timer on disable and no longer embeds the screenshot helper.
+- `connect-hearing-aids` polls for the BAP profile instead of sleeping: about 4 s instead of 10 s when the aids are already connected. It finds the device path on any adapter (no more `hci0` assumption) and says so when it cannot read the system journal instead of silently passing the stream check.
+- `install.sh` requires `gettext` (the compiled French catalog is no longer versioned, it had drifted behind the source) and enables the extension through `gnome-extensions`.
+- `scripts/check` and a GitHub Actions workflow run the static checks: JS syntax, shellcheck, translation catalogs against the code.
+
 ### v1.2.1 — Stream check in the connect script (2026-09-05)
 
 - `connect-hearing-aids` now probes the stream after connecting and resets the adapter when the ISO connection fails with "busy" or "timed out", a state seen after a reboot that no reconnect could clear.
