@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC2329  # bap_ok and active_profile are called through wait_for
+# shellcheck disable=SC2317,SC2329  # bap_ok and active_profile are called through wait_for
 # Connect LE Audio hearing aids and make sure PipeWire ends up on the BAP
 # profile.
 #
