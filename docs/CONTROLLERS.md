@@ -14,7 +14,7 @@ Useful extras on the same line: `cis-peripheral`, `iso-broadcaster` (Auracast tr
 
 | Controller | Bus / ID | Chipset | `cis-central` | LE Audio to hearing aids | Notes |
 |---|---|---|---|---|---|
-| Intel AX211 | PCIe / USB 8087:0033 | Intel | yes | **works** (ReSound Vivia 960, stereo, 2M PHY) | Fedora 44, kernel 7.1.12, BlueZ 5.87. Occasional light crackle at a few metres. |
+| Intel AX211 | PCIe / USB 8087:0033 | Intel | yes | **works** (ReSound Vivia 960, stereo, 2M PHY) | Fedora 44, kernel 7.1.13, BlueZ 5.87, firmware 42-20.25. Occasional light crackle at a few metres. Refuses `LE Create CIS` (`Command Disallowed`) after the aids connected before any BAP endpoint existed, until a power cycle: [bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496). |
 | UGREEN "BT 5.4 Adapter" | USB 33fa:0010 | Actions Semiconductor (manufacturer id 2279) | **no** | no | Bluetooth 5.4 on the box, no ISO support in firmware. Classic and BLE only. |
 
 ## Reported elsewhere, not verified here
