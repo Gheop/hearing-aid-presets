@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2329  # bap_ok and active_profile are called through wait_for
 # Connect LE Audio hearing aids and make sure PipeWire ends up on the BAP
 # profile.
 #
@@ -79,6 +80,17 @@ connect_device() {
     return 1
 }
 
+# wait_for <function> <seconds>: poll once a second until it succeeds.
+wait_for() {
+    local check="$1" tries="$2"
+    while [ "$tries" -gt 0 ]; do
+        "$check" && return 0
+        sleep 1
+        tries=$((tries - 1))
+    done
+    return 1
+}
+
 # True when every connected aid is on the bap-sink profile.
 bap_ok() {
     local mac
@@ -134,7 +146,7 @@ power_cycle() {
     bluetoothctl power on > /dev/null 2>&1
     sleep 4
     connect_both
-    sleep 12
+    wait_for bap_ok 15 || true
 }
 
 echo "Connecting hearing aids..."
@@ -159,8 +171,8 @@ finish() {
     exit 1
 }
 
-sleep 6
-if bap_ok; then
+# WirePlumber needs a few seconds after the connection to switch profiles.
+if wait_for bap_ok 12; then
     echo "BAP profile active."
     finish
 fi
@@ -177,8 +189,7 @@ for _ in $(seq 1 15); do
 done
 sleep 2
 connect_both
-sleep 10
-if bap_ok; then
+if wait_for bap_ok 15; then
     echo "BAP profile active."
     finish
 fi
