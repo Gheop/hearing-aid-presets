@@ -15,14 +15,17 @@ echo "Extension -> $EXT_DIR"
 mkdir -p "$EXT_DIR"
 cp -r "$HERE/extension/." "$EXT_DIR/"
 # Translations: compile every po/<lang>.po into the extension's locale tree.
-if command -v msgfmt > /dev/null; then
-    for po in "$HERE"/po/*.po; do
-        [ -e "$po" ] || continue
-        lang="$(basename "$po" .po)"
-        mkdir -p "$EXT_DIR/locale/$lang/LC_MESSAGES"
-        msgfmt -o "$EXT_DIR/locale/$lang/LC_MESSAGES/hearing-aid-presets.mo" "$po"
-    done
+# The .mo files are not versioned, so msgfmt (gettext) is required.
+if ! command -v msgfmt > /dev/null; then
+    echo "msgfmt not found: install gettext (dnf install gettext / apt install gettext) and run again." >&2
+    exit 1
 fi
+for po in "$HERE"/po/*.po; do
+    [ -e "$po" ] || continue
+    lang="$(basename "$po" .po)"
+    mkdir -p "$EXT_DIR/locale/$lang/LC_MESSAGES"
+    msgfmt --check -o "$EXT_DIR/locale/$lang/LC_MESSAGES/hearing-aid-presets.mo" "$po"
+done
 
 echo "Script -> $BIN_DIR/connect-hearing-aids"
 mkdir -p "$BIN_DIR"

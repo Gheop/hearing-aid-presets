@@ -37,6 +37,7 @@ What you get:
 
 - A Bluetooth controller that supports LE Audio. Check with `sudo btmgmt info`: the `supported settings` line must contain `cis-central`. Intel AX2xx cards do; many cheap "Bluetooth 5.3" USB dongles (Realtek, Actions) do not, whatever the box says. See [docs/CONTROLLERS.md](docs/CONTROLLERS.md).
 - BlueZ 5.77 or later, PipeWire 1.6 or later, a kernel with ISO socket support (6.x is fine).
+- `gettext` (`msgfmt`) to compile the menu translations at install time.
 - GNOME Shell 50 for the extension (the `shell-version` field in `extension/metadata.json` is easy to widen if you test on 46 to 49).
 - Hearing aids that advertise the LE Audio services. `bluetoothctl info <MAC>` should list `Audio Stream Control`, `Published Audio Capabilities`, `Common Audio` and `Hearing Aid`.
 
@@ -137,7 +138,7 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 
 ```
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
-scripts/              connect-hearing-aids
+scripts/              connect-hearing-aids, check (static checks run by CI)
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet and the bluetoothd systemd override
 po/                   translations (French so far)

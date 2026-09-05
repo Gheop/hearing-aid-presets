@@ -1,0 +1,40 @@
+#!/bin/bash
+# Static checks, run by CI and by hand: JS syntax, shell lint, translations.
+set -eu
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$HERE"
+status=0
+
+echo "== node --check"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+cp extension/extension.js "$tmp/extension.mjs"
+node --check "$tmp/extension.mjs" || status=1
+
+echo "== shellcheck"
+shellcheck -x install.sh scripts/connect-hearing-aids scripts/check || status=1
+
+echo "== msgfmt --check"
+for po in po/*.po; do
+    msgfmt --check -o /dev/null "$po" || status=1
+done
+
+echo "== msgid coverage"
+# Every _('...') in the code must have an entry in each .po, and vice versa.
+grep -oE "_\('[^']+'\)" extension/extension.js | sed "s/^_('//; s/')$//" | sort -u > "$tmp/code"
+for po in po/*.po; do
+    grep -E '^msgid "' "$po" | sed 's/^msgid "//; s/"$//' | grep -v '^$' | sort -u > "$tmp/po"
+    if ! diff -u "$tmp/code" "$tmp/po"; then
+        echo "$po: msgids differ from extension.js" >&2
+        status=1
+    fi
+done
+
+echo "== no compiled catalogs in the tree"
+if git ls-files | grep -q '\.mo$'; then
+    echo ".mo files must not be versioned, install.sh compiles them" >&2
+    status=1
+fi
+
+[ "$status" -eq 0 ] && echo "all checks passed"
+exit "$status"
