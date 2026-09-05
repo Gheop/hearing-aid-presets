@@ -146,6 +146,19 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 **The aids will not connect.** They are probably connected to your phone. Also, the first connection attempt after a bluetoothd restart often fails with `le-connection-abort-by-local`; the script retries once.
 
+## Reporting the stale ISO group upstream
+
+The "busy" after boot is a BlueZ or kernel bug: an LE Audio device connected before any BAP endpoint exists leaves an ISO group in the controller that no disconnect clears. It has not been reported upstream yet; a report needs an HCI trace from boot. `scripts/capture-iso-busy` does the system side:
+
+```sh
+echo 'RESET_ON_BOOT=no' >> ~/.config/hearing-aids/devices.conf   # let the bug happen
+sudo scripts/capture-iso-busy arm       # btmon from boot, bluetoothd -d
+# reboot, log in, wait for the connect service, play a sound
+sudo scripts/capture-iso-busy collect   # bundles everything in ~/iso-busy-report-*, restores
+```
+
+Then remove the `RESET_ON_BOOT` line. The bundle holds `btmon-boot.snoop`, the bluetoothd, kernel, PipeWire and user journals, versions and controller details. It contains the Bluetooth addresses of your devices and nothing else personal.
+
 ## Alternatives
 
 If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audio, look at [asha_pipewire_sink](https://github.com/thewierdnut/asha_pipewire_sink). Do not run it with `Experimental = true` in BlueZ: the two ASHA implementations are incompatible. Our Vivia 960 also work through it, but LE Audio gives a better codec and needs nothing outside the distribution.
@@ -154,7 +167,7 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 
 ```
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
-scripts/              connect-hearing-aids, check (static checks run by CI)
+scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet, bluetoothd systemd override, GDM WirePlumber config
 po/                   translations (French so far)
@@ -163,6 +176,11 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.6 — Capture script for the upstream report (2026-09-05)
+
+- `scripts/capture-iso-busy` (root) arms an HCI trace from boot and bluetoothd in debug, then collects journals, versions and controller details into one folder and restores the system.
+- `RESET_ON_BOOT=no` in `devices.conf` disables the adapter reset on the first run after boot, to let the bug reproduce for the capture.
 
 ### v1.3.5 — Adapter reset on the first run after boot (2026-09-05)
 

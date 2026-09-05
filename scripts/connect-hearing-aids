@@ -15,6 +15,7 @@
 #   RIGHT=AA:BB:CC:DD:EE:00
 #   LEFT_ALIAS="Vivia"        # optional, shown in GNOME
 #   RIGHT_ALIAS="Vivia R"     # optional
+#   RESET_ON_BOOT=no          # optional, keep the stale ISO group bug reproducible
 
 set -u
 
@@ -30,6 +31,7 @@ fi
 LEFT_ALIAS="${LEFT_ALIAS:-}"
 RIGHT_ALIAS="${RIGHT_ALIAS:-}"
 RESET_AT=""
+RESET_ON_BOOT="${RESET_ON_BOOT:-yes}"
 
 # D-Bus path of a device, whatever adapter it is paired with.
 device_path() {
@@ -170,7 +172,7 @@ first_run_since_boot() {
     mkdir -p "$(dirname "$BOOT_STAMP")" && echo "$boot_id" > "$BOOT_STAMP"
 }
 
-if first_run_since_boot; then
+if [ "$RESET_ON_BOOT" != no ] && first_run_since_boot; then
     echo "First run since boot: resetting the adapter so the aids connect after WirePlumber..."
     power_cycle
 else

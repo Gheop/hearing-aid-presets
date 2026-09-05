@@ -1,0 +1,96 @@
+#!/bin/bash
+# Captures what an upstream BlueZ report needs for the "Device or resource
+# busy" ISO bug: an HCI trace from boot, bluetoothd in debug, journals,
+# versions and controller details. Run as root.
+#
+#   sudo scripts/capture-iso-busy arm       # then reboot, log in, play sound
+#   sudo scripts/capture-iso-busy collect   # gathers everything, restores
+#
+# Between the two, keep RESET_ON_BOOT=no in ~/.config/hearing-aids/devices.conf
+# so connect-hearing-aids does not reset the adapter before the bug shows.
+set -eu
+
+UNIT=/etc/systemd/system/btmon-capture.service
+DEBUG_DROPIN=/etc/systemd/system/bluetooth.service.d/zz-debug-capture.conf
+SNOOP=/var/log/btmon-boot.snoop
+
+[ "$(id -u)" -eq 0 ] || { echo "run as root: sudo $0 $*" >&2; exit 1; }
+
+arm() {
+    cat > "$UNIT" <<'UNIT_EOF'
+[Unit]
+Description=HCI trace from boot (BlueZ ISO busy report)
+Before=bluetooth.service
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+ExecStart=/usr/bin/btmon -w /var/log/btmon-boot.snoop
+
+[Install]
+WantedBy=sysinit.target
+UNIT_EOF
+    mkdir -p "$(dirname "$DEBUG_DROPIN")"
+    # Re-declare ExecStart with -d on top of whatever the existing override
+    # sets, so the vcp plugin stays disabled.
+    current="$(systemctl show -p ExecStart --value bluetooth | sed -n 's/.*argv\[\]=\([^;]*\) ;.*/\1/p')"
+    printf '[Service]\nExecStart=\nExecStart=%s -d\n' "$current" > "$DEBUG_DROPIN"
+    systemctl daemon-reload
+    systemctl enable btmon-capture.service > /dev/null
+    echo "Armed. bluetoothd will run as: $current -d"
+    echo "Now: reboot, log in, wait for the hearing-aids-connect service to finish"
+    echo "(systemctl --user status hearing-aids-connect), play a sound, then:"
+    echo "  sudo $0 collect"
+}
+
+collect() {
+    local user home out
+    user="${SUDO_USER:-}"
+    [ -n "$user" ] || { echo "run through sudo so the report lands in your home" >&2; exit 1; }
+    home="$(getent passwd "$user" | cut -d: -f6)"
+    out="$home/iso-busy-report-$(date +%Y%m%d-%H%M)"
+    mkdir -p "$out"
+
+    systemctl stop btmon-capture.service 2>/dev/null || true
+    [ -f "$SNOOP" ] && mv "$SNOOP" "$out/btmon-boot.snoop"
+
+    {
+        echo "# versions"
+        uname -r
+        bluetoothctl --version
+        pipewire --version 2>/dev/null | head -1
+        wireplumber --version 2>/dev/null | head -1
+        gnome-shell --version 2>/dev/null
+        echo; echo "# bluetoothd command line"
+        systemctl show -p ExecStart --value bluetooth
+        echo; echo "# main.conf (effective, uncommented lines)"
+        grep -vE '^\s*(#|$)' /etc/bluetooth/main.conf
+        echo; echo "# overrides"
+        for f in /etc/systemd/system/bluetooth.service.d/*.conf; do echo "## $f"; cat "$f"; done
+    } > "$out/versions.txt"
+    btmgmt info > "$out/btmgmt-info.txt" 2>&1 || true
+    { lsusb; echo; lspci -nn | grep -iE 'bluetooth|network|wireless'; } > "$out/controller.txt" 2>&1 || true
+    journalctl -b -k -o short-precise > "$out/kernel.log"
+    journalctl -b -u bluetooth -o short-precise > "$out/bluetoothd.log"
+    journalctl -b -o short-precise _COMM=wireplumber _COMM=pipewire > "$out/pipewire.log" 2>/dev/null || true
+    journalctl -b -o short-precise > "$out/full-journal.log"
+    for m in $(sed -n 's/^\(LEFT\|RIGHT\)=\(.*\)/\2/p' "$home/.config/hearing-aids/devices.conf" 2>/dev/null); do
+        { echo "## $m"; bluetoothctl info "$m"; echo; } >> "$out/devices.txt" 2>&1 || true
+    done
+    journalctl -b -o short-precise "_UID=$(id -u "$user")" > "$out/user-journal.log" 2>/dev/null || true
+
+    # Restore
+    systemctl disable btmon-capture.service > /dev/null 2>&1 || true
+    rm -f "$UNIT" "$DEBUG_DROPIN"
+    systemctl daemon-reload
+    systemctl restart bluetooth
+    chown -R "$user:" "$out"
+    echo "Report in $out"
+    echo "bluetoothd restored (no debug); run connect-hearing-aids to reconnect the aids."
+}
+
+case "${1:-}" in
+    arm) arm ;;
+    collect) collect ;;
+    *) echo "usage: sudo $0 arm|collect" >&2; exit 1 ;;
+esac

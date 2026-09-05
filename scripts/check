@@ -12,7 +12,7 @@ cp extension/extension.js "$tmp/extension.mjs"
 node --check "$tmp/extension.mjs" || status=1
 
 echo "== shellcheck"
-shellcheck -x install.sh scripts/connect-hearing-aids scripts/check || status=1
+shellcheck -x install.sh scripts/connect-hearing-aids scripts/check scripts/capture-iso-busy || status=1
 
 echo "== msgfmt --check"
 for po in po/*.po; do
