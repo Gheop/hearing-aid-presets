@@ -88,13 +88,64 @@ connect_both() {
     connect_device "$LEFT" "$LEFT_ALIAS"
 }
 
+# Number of PipeWire sinks belonging to the pair. One means the coordinated
+# set formed; two means each aid got its own set, and their two ISO groups
+# then block each other in the controller ("Device or resource busy").
+pair_sinks() {
+    pactl list sinks short 2>/dev/null | grep -cE "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\."
+}
+
+# Play one second of silence and look for ISO connection failures in the
+# bluetoothd journal. A stale ISO group in the controller survives reconnects
+# and even a bluetoothd restart; only powering the adapter off and on clears it.
+stream_ok() {
+    local sink since
+    sink="$(pactl list sinks short 2>/dev/null | grep -E "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\." | head -1 | awk '{print $2}')"
+    [ -n "$sink" ] || return 1
+    since="$(date '+%Y-%m-%d %H:%M:%S')"
+    timeout 6 pw-play --raw --format=s16 --rate=48000 --channels=2 --target="$sink" /dev/zero > /dev/null 2>&1 &
+    sleep 4
+    kill %% 2>/dev/null
+    wait 2>/dev/null
+    ! journalctl -u bluetooth --since "$since" --no-pager 2>/dev/null | grep -qE 'iso_connect_cb.*(busy|timed out)'
+}
+
+power_cycle() {
+    echo "Resetting the Bluetooth adapter to clear stale ISO groups..."
+    bluetoothctl power off > /dev/null 2>&1
+    sleep 3
+    bluetoothctl power on > /dev/null 2>&1
+    sleep 4
+    connect_both
+    sleep 12
+}
+
 echo "Connecting hearing aids..."
 connect_both
+
+finish() {
+    if [ "$(pair_sinks)" -gt 1 ]; then
+        echo "The pair shows up as two sinks instead of one coordinated set."
+        power_cycle
+    fi
+    if stream_ok; then
+        echo "BAP profile active, stream established."
+        exit 0
+    fi
+    echo "ISO stream failed (busy or timed out)."
+    power_cycle
+    if stream_ok; then
+        echo "BAP profile active, stream established after adapter reset."
+        exit 0
+    fi
+    echo "Stream still failing after an adapter reset. Try a reboot, and check docs/ for known issues." >&2
+    exit 1
+}
 
 sleep 6
 if bap_ok; then
     echo "BAP profile active."
-    exit 0
+    finish
 fi
 
 echo "No BAP profile, reconnecting so BlueZ renegotiates..."
@@ -112,7 +163,7 @@ connect_both
 sleep 10
 if bap_ok; then
     echo "BAP profile active."
-else
-    echo "Still no BAP profile. Try: sudo systemctl restart bluetooth, then run this script again." >&2
-    exit 1
+    finish
 fi
+echo "Still no BAP profile. Try: sudo systemctl restart bluetooth, then run this script again." >&2
+exit 1

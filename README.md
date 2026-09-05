@@ -31,7 +31,7 @@ What you get:
 
 - Stereo LC3 streaming from PipeWire to both aids, through the standard BlueZ + PipeWire stack. No third-party daemon.
 - A GNOME Shell extension: an ear icon appears while the aids are connected, with a menu showing the model, the battery level of each ear, a volume slider per ear, and the programs ("Universal", "Noise", "Outdoor"...). One click switches both ears. The menu follows changes made on the aids or from the phone.
-- A `connect-hearing-aids` script and a user service that connect the aids at login and work around a BlueZ quirk that otherwise leaves you without sound after a session restart.
+- A `connect-hearing-aids` script and a user service that connect the aids at login, check that the LE Audio stream really comes up, and work around two BlueZ quirks that otherwise leave you without sound after a session restart or a reboot.
 
 ## Requirements
 
@@ -117,6 +117,8 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
 
+**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)` or `Connection timed out (110)`. Seen after a reboot when PipeWire first created two sinks for the pair instead of one coordinated set: each half allocated an ISO group in the controller, and the stale one blocks every later stream, surviving reconnects and even a bluetoothd restart. Only powering the adapter off and on clears it. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
+
 **One aid shows no GATT objects on D-Bus** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension or battery meters only see the other aid). Seen with BlueZ 5.87 after reconnecting one aid alone: bluetoothd logs `No matching connection for device` and attaches no profile. `sudo systemctl restart bluetooth`, then `connect-hearing-aids`.
 
 **`Cannot set the volume` notification, or the sliders snap back.** bluetoothd is running without `--noplugin=vcp`; check `systemctl show -p ExecStart bluetooth`.
@@ -144,6 +146,11 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.2.1 — Stream check in the connect script (2026-09-05)
+
+- `connect-hearing-aids` now probes the stream after connecting and resets the adapter when the ISO connection fails with "busy" or "timed out", a state seen after a reboot that no reconnect could clear.
+- It also detects the pair showing up as two sinks instead of one coordinated set.
 
 ### v1.2.0 — Battery levels and per-ear volume (2026-09-04)
 
