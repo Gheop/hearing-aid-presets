@@ -152,6 +152,10 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.2 — Stream probe catches the 30 s retry cycle (2026-09-05)
+
+- `connect-hearing-aids` reported "stream established" while bluetoothd kept logging `Device or resource busy` every 30 s: when audio is already playing, the ISO connect is retried on a 30 s cycle and a 4 s probe missed it. The probe now also looks at the previous 35 s of the journal.
+
 ### v1.3.1 — Left and right stay labelled (2026-09-05)
 
 - Battery and volume rows showed the Bluetooth aliases ("Vivia R", "Vivia") instead of Left/Right when the aids reconnected: the side comes from the BAP endpoint, which BlueZ creates a moment after the battery and volume characteristics, and the labels were frozen at first sight. They now follow every rescan.

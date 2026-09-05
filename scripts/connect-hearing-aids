@@ -131,7 +131,9 @@ stream_ok() {
     [ "$JOURNAL_OK" = 1 ] || return 0
     sink="$(pactl list sinks short 2>/dev/null | grep -E "bluez_output\.(${RIGHT//:/_}|${LEFT//:/_})\." | head -1 | awk '{print $2}')"
     [ -n "$sink" ] || return 1
-    since="$(date '+%Y-%m-%d %H:%M:%S')"
+    # When something is already playing, bluetoothd retries the ISO connect
+    # every 30 s: a failure from the last cycle counts too.
+    since="$(date -d '-35 seconds' '+%Y-%m-%d %H:%M:%S')"
     timeout 6 pw-play --raw --format=s16 --rate=48000 --channels=2 --target="$sink" /dev/zero > /dev/null 2>&1 &
     sleep 4
     kill %% 2>/dev/null
