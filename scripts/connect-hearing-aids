@@ -159,13 +159,20 @@ stream_ok() {
     ! journalctl -u bluetooth --since "$since" --no-pager 2>/dev/null | grep -qE 'iso_connect_cb.*(busy|timed out)'
 }
 
+adapter_off() { bluetoothctl show 2>/dev/null | grep -q 'Powered: no'; }
+adapter_on() { bluetoothctl show 2>/dev/null | grep -q 'Powered: yes'; }
+both_connected() { is_connected "$LEFT" && is_connected "$RIGHT"; }
+
 power_cycle() {
     echo "Resetting the Bluetooth adapter..."
     bluetoothctl power off > /dev/null 2>&1
-    sleep 3
+    wait_for adapter_off 5 || true
     RESET_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     bluetoothctl power on > /dev/null 2>&1
-    sleep 4
+    wait_for adapter_on 5 || true
+    # Trusted aids reconnect on their own right after power on; a connect
+    # issued during that reconnection fails, so give them a moment first.
+    wait_for both_connected 6 || true
     connect_both
     wait_for bap_ok 15 || true
 }

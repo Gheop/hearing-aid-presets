@@ -180,6 +180,10 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.9 — Faster adapter reset (2026-09-09)
+
+- The reset on the first run after boot no longer sleeps 3 s then 4 s: the script waits for the adapter to report powered off, then on, then for the aids to reconnect on their own (6 s at most) before issuing `connect`. Measured on 10 interleaved runs: 12.2 s down to 7.8 s for the reset path, no failure.
+
 ### v1.3.8 — Connect as soon as WirePlumber is ready (2026-09-09)
 
 - The user service no longer sleeps 8 s before connecting: the script waits for WirePlumber's LE Audio endpoints to show up in BlueZ (`Media1.SupportedUUIDs`), which takes under a second after WirePlumber starts. Measured 8.7 s of fixed wait on the three previous boots.
