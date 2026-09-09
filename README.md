@@ -96,7 +96,7 @@ The aliases are optional. PipeWire attaches the single stereo sink to the left a
 
 ### 3. Pair and log in again
 
-Pair both aids once with the GNOME Bluetooth panel or `bluetoothctl` (put them in pairing mode). Then log out and back in: GNOME only loads new extensions at login, and the user service connects the aids about 10 seconds after WirePlumber starts.
+Pair both aids once with the GNOME Bluetooth panel or `bluetoothctl` (put them in pairing mode). Then log out and back in: GNOME only loads new extensions at login, and the user service connects the aids as soon as WirePlumber has registered its LE Audio endpoints with BlueZ.
 
 ## Using it
 
@@ -170,6 +170,7 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 ```
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
 scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
+bench/                login-time (login → sound timing from the journal), baseline, journal
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet, bluetoothd systemd override, GDM and suspend WirePlumber configs
 po/                   translations (French so far)
@@ -178,6 +179,11 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.8 — Connect as soon as WirePlumber is ready (2026-09-09)
+
+- The user service no longer sleeps 8 s before connecting: the script waits for WirePlumber's LE Audio endpoints to show up in BlueZ (`Media1.SupportedUUIDs`), which takes under a second after WirePlumber starts. Measured 8.7 s of fixed wait on the three previous boots.
+- `bench/login-time` prints the login → sound timing of the last boots from the journal, phase by phase.
 
 ### v1.3.7 — Optional WirePlumber rule against the resume delay (2026-09-05)
 

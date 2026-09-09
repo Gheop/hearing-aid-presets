@@ -94,6 +94,17 @@ wait_for() {
     return 1
 }
 
+# True once WirePlumber has registered its LE Audio endpoints with BlueZ:
+# the adapter's Media1.SupportedUUIDs then lists the Sink PAC UUID (0x2BC9).
+# Connecting before that only yields the ASHA profile.
+bap_endpoints_ready() {
+    local adapter
+    adapter="$(busctl tree org.bluez --list 2>/dev/null | grep -m1 -E '/org/bluez/hci[0-9]+$')"
+    [ -n "$adapter" ] || return 1
+    busctl get-property org.bluez "$adapter" org.bluez.Media1 SupportedUUIDs 2>/dev/null |
+        grep -qi 00002bc9
+}
+
 # True when every connected aid is on the bap-sink profile.
 bap_ok() {
     local mac
@@ -171,6 +182,11 @@ first_run_since_boot() {
     [ "$(cat "$BOOT_STAMP" 2>/dev/null)" != "$boot_id" ] || return 1
     mkdir -p "$(dirname "$BOOT_STAMP")" && echo "$boot_id" > "$BOOT_STAMP"
 }
+
+echo "Waiting for WirePlumber's LE Audio endpoints..."
+if ! wait_for bap_endpoints_ready 20; then
+    echo "No LE Audio endpoint registered after 20 s: is WirePlumber running with Bluetooth support?" >&2
+fi
 
 if [ "$RESET_ON_BOOT" != no ] && first_run_since_boot; then
     echo "First run since boot: resetting the adapter so the aids connect after WirePlumber..."

@@ -1,0 +1,21 @@
+{
+  "metric": "login -> sound: wall clock of hearing-aids-connect.service (Starting -> Finished), seconds",
+  "guardrails": ["service CPU time (journal 'Consumed')", "service exit status", "gnome-shell %CPU with vs without the extension"],
+  "commit": "0015eea",
+  "date": "2026-09-09",
+  "environment": "Fedora 44, kernel 7.1.13, BlueZ 5.87, PipeWire 1.6.8, WirePlumber 0.5.14, GNOME 50.4, Intel AX211, ReSound Vivia 960 x2",
+  "command": "bench/login-time 8",
+  "samples": [
+    {"boot": "2026-09-09 09:05", "pre": 8.7, "connect": 17.3, "probe": 4.0, "total": 30.1, "cpu_ms": 702},
+    {"boot": "2026-09-08 17:15", "pre": 8.8, "connect": 8.0, "probe": 4.1, "total": 20.9, "cpu_ms": 916},
+    {"boot": "2026-09-08 09:07", "pre": 8.6, "connect": 7.8, "probe": 4.0, "total": 20.5, "cpu_ms": 611}
+  ],
+  "excluded": "3 boots where the aids were in their charger or the machine suspended mid-script (service failed): not a performance sample",
+  "median_total": 20.9,
+  "note": "One sample per reboot; n=3 is below the 10-run rule, the spread on 'connect' (7.8 to 17.3 s) is the aids, not the script. 'pre' is a fixed sleep (ExecStartPre=/bin/sleep 8) plus script start.",
+  "extension": {
+    "gnome_shell_cpu_pct": {"enabled": 13.6, "disabled": 13.8, "enabled_again": 13.8, "interval_s": 5, "n": 6},
+    "bluez_signals_per_minute_idle": 0,
+    "verdict": "no measurable cost at rest"
+  }
+}

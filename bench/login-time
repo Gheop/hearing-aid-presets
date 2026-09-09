@@ -1,0 +1,28 @@
+#!/bin/bash
+# Login -> sound timing of hearing-aids-connect.service, per boot, from the
+# journal. Phases (seconds):
+#   pre      Starting -> first script line (ExecStartPre / endpoint wait)
+#   connect  first script line -> "BAP profile active."
+#   probe    "BAP profile active." -> Finished (stream probe)
+#   total    Starting -> Finished
+# Usage: bench/login-time [boots]   (default 5, most recent first)
+set -u
+boots="${1:-5}"
+printf '%-6s %-19s %6s %8s %6s %7s  %s\n' boot date pre connect probe total path
+for ((b = 0; b < boots; b++)); do
+    log="$(journalctl --user -b "-$b" -u hearing-aids-connect -o short-unix --no-pager 2>/dev/null)" || break
+    [ -n "$log" ] || continue
+    start="$(grep -m1 'Starting hearing-aids-connect' <<< "$log" | awk '{print $1}')"
+    first="$(grep -m1 -E 'connect-hearing-aids\[[0-9]+\]: (Connecting|First run|Waiting)' <<< "$log" | awk '{print $1}')"
+    bap="$(grep -m1 'BAP profile active\.' <<< "$log" | awk '{print $1}')"
+    end="$(grep -m1 -E 'Finished hearing-aids-connect|Failed to start' <<< "$log" | awk '{print $1}')"
+    path=normal
+    grep -q 'First run since boot' <<< "$log" && path=reset
+    grep -q 'No BAP profile' <<< "$log" && path="$path+reconnect"
+    grep -q 'ISO stream failed' <<< "$log" && path="$path+probe-fail"
+    grep -q 'Failed to start' <<< "$log" && path="$path+FAILED"
+    [ -n "$start" ] && [ -n "$end" ] || continue
+    date="$(date -d "@${start%.*}" '+%Y-%m-%d %H:%M:%S')"
+    awk -v s="$start" -v f="${first:-$start}" -v p="${bap:-$end}" -v e="$end" -v b="$b" -v d="$date" -v path="$path" \
+        'BEGIN { printf "%-6s %-19s %6.1f %8.1f %6.1f %7.1f  %s\n", b, d, f-s, p-f, e-p, e-s, path }'
+done
