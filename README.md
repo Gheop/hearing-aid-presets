@@ -67,7 +67,7 @@ The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distrib
 
 The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
 
-Optional: let the script restart bluetoothd by itself when BlueZ ends up holding a stale connection (see Troubleshooting, "One aid shows no GATT objects"). The rule grants exactly one thing: restarting `bluetooth.service`, to your user, without a password.
+Optional: let the script restart bluetoothd by itself when BlueZ ends up holding a stale connection (see Troubleshooting, "One aid shows no GATT objects"). The rule grants exactly one thing: restarting `bluetooth.service`, to your user, without a password. It does not check that the session is local or active, because the script runs from a systemd user service that belongs to no logind session; any session of yours can therefore restart bluetoothd without a password.
 
 ```sh
 sed "s/@USER@/$USER/" bluetooth/50-hearing-aids-bluetooth.rules | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules > /dev/null
@@ -179,6 +179,13 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.18 — Hygiene (2026-09-15)
+
+- The script header described a disconnect and reconnect that v1.3.10 removed, and explained the wrong reason for the recovery. Rewritten.
+- The shellcheck directive now sits on the functions reached through `wait_for` or a trap instead of covering the whole file, so genuinely unreachable code added later is still reported.
+- The polkit rule says why it deliberately skips the `subject.active` check, and the README says what that costs.
+- CI updates the package index before installing its tools.
 
 ### v1.3.17 — Prefer the ear that answers (2026-09-15)
 

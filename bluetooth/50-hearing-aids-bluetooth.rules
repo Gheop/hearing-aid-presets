@@ -2,6 +2,12 @@
 // connect-hearing-aids can clear BlueZ's "No matching connection for device"
 // state by itself (last resort, after two adapter resets). Nothing else is
 // granted: one unit, one verb, one user.
+//
+// Deliberately no subject.active or subject.local check: the script runs from
+// a systemd user service, whose process belongs to no logind session, so such
+// a check would deny exactly the case the rule exists for. The trade-off is
+// that any session of this user, a remote one included, can restart
+// bluetoothd without a password. That is a local nuisance, not an escalation.
 // Install: sed "s/@USER@/$USER/" bluetooth/50-hearing-aids-bluetooth.rules \
 //            | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules
 polkit.addRule(function(action, subject) {
