@@ -134,11 +134,15 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 ## Troubleshooting
 
-**No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: it disconnects, waits for the link to really drop (the aids reconnect by themselves within seconds, which is exactly what defeats a naive reconnect), reconnects, and checks that both cards are on `bap-sink`.
+**No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: when the BAP profile does not come up it power-cycles the adapter so both aids reconnect together, then checks that both cards are on `bap-sink` and that both transports really carry audio. (Earlier versions disconnected and reconnected the aids instead; with BlueZ 5.87 that regularly ends in the state below.)
 
 **Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)`, repeated every 30 s while something plays. The HCI trace behind it ([bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496)): the controller answers `Command Disallowed` to `LE Create CIS`, and keeps doing so even after bluetoothd removes and re-creates the CIG, reconnects the aids or is restarted. It happens when the aids connected before any BAP endpoint existed, which is what trusted aids do a second after bluetoothd starts at boot. Only powering the adapter off and on clears it; the script does that on its first run after each boot, before connecting. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
 
-**One aid shows no GATT objects on D-Bus** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension or battery meters only see the other aid). Seen with BlueZ 5.87 after reconnecting one aid alone: bluetoothd logs `No matching connection for device` and attaches no profile. `sudo systemctl restart bluetooth`, then `connect-hearing-aids`.
+**One aid shows no GATT objects on D-Bus, or only an `asha-sink` profile** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension only sees the other ear, no sound on that side). Seen with BlueZ 5.87 after an aid reconnects on its own right after a disconnect: bluetoothd logs `No matching connection for device` and attaches no profile, and neither a reconnection nor an adapter reset clears it. Restart bluetoothd, then WirePlumber (it otherwise keeps stale ASHA nodes from before the restart and plays into the void), then the script:
+
+```sh
+sudo systemctl restart bluetooth && systemctl --user restart wireplumber && connect-hearing-aids
+```
 
 **`Cannot set the volume` notification, or the sliders snap back.** bluetoothd is running without `--noplugin=vcp`; check `systemctl show -p ExecStart bluetooth`.
 
@@ -179,6 +183,12 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.10 — No more disconnect/reconnect fallback (2026-09-15)
+
+- When the BAP profile does not come up, `connect-hearing-aids` resets the adapter instead of disconnecting and reconnecting the aids: with BlueZ 5.87 the reconnection regularly leaves one aid connected without any profile ("No matching connection for device"), silent and invisible to the extension until bluetoothd is restarted.
+- The stream probe now checks that both BAP transports are active during playback, so a silent ear is reported instead of "stream established".
+- Troubleshooting: the bluetoothd restart must be followed by a WirePlumber restart.
 
 ### v1.3.9 — Faster adapter reset (2026-09-09)
 
