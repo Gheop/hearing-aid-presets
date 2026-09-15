@@ -631,6 +631,10 @@ export default class HearingAidPresetsExtension extends Extension {
         this._cancellable = new Gio.Cancellable();
         this._managerSignals = [];
         this._rescanId = 0;
+        // Aids that answered Read Presets with an empty list. Preferring the
+        // other ear beats showing an empty menu: half the reads came back
+        // with no program at all over four days of logs.
+        this._emptyReaders = new Set();
 
         Gio.DBusObjectManagerClient.new_for_bus(Gio.BusType.SYSTEM,
             Gio.DBusObjectManagerClientFlags.NONE, BLUEZ, '/', null, this._cancellable,
@@ -672,6 +676,13 @@ export default class HearingAidPresetsExtension extends Extension {
             this._manager = null;
         }
         this._dropDevice();
+        this._emptyReaders.clear();
+    }
+
+    // The first aid that has not reported an empty program list, falling
+    // back to the first one when every candidate has.
+    _pickDevice(usable) {
+        return usable.find(u => !this._emptyReaders.has(u.path)) || usable[0];
     }
 
     // BlueZ adds GATT objects one by one; wait for the burst to settle.
@@ -770,8 +781,9 @@ export default class HearingAidPresetsExtension extends Extension {
         if (!this._manager)
             return;
         const { usable, batteries, volumes } = this._findDevices();
+        const pick = usable.length > 0 ? this._pickDevice(usable) : null;
         if (this._device) {
-            if (usable.some(u => u.path === this._device.path)) {
+            if (pick && pick.path === this._device.path) {
                 this._device.setBatteries(batteries).catch(e =>
                     console.warn(`hearing-aid-presets: battery (${e.message})`));
                 this._device.setVolumeChars(volumes).catch(e =>
@@ -780,9 +792,9 @@ export default class HearingAidPresetsExtension extends Extension {
             }
             this._dropDevice();
         }
-        if (usable.length === 0)
+        if (!pick)
             return;
-        const { path, dev, chars } = usable[0];
+        const { path, dev, chars } = pick;
         this._device = new HearingDevice(this, path, dev, chars);
         this._indicator = new Indicator(this, this._device);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
@@ -807,8 +819,20 @@ export default class HearingAidPresetsExtension extends Extension {
     }
 
     onPresetsChanged(device) {
-        if (this._indicator && device === this._device)
-            this._indicator.setPresets(device.presets, device.active);
+        if (!this._indicator || device !== this._device)
+            return;
+        this._indicator.setPresets(device.presets, device.active);
+        if (device.presets.size > 0) {
+            this._emptyReaders.delete(device.path);
+            return;
+        }
+        // An empty list is never useful. Rule this aid out and let the rescan
+        // pick the other ear, unless it has already been ruled out too.
+        if (this._emptyReaders.has(device.path))
+            return;
+        this._emptyReaders.add(device.path);
+        console.log(`hearing-aid-presets: ${device.path} reports no program, trying the other aid`);
+        this._scheduleRescan();
     }
 
     onActiveChanged(device) {

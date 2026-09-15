@@ -180,6 +180,10 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.17 — Prefer the ear that answers (2026-09-15)
+
+- The extension used to drive whichever aid BlueZ listed first. When that one answered Read Presets with an empty list the menu stayed empty: over four days of logs, 31 reads out of 135 returned no program at all and 37 returned a single one. It now rules out an aid that reports an empty list and switches to the other ear, and takes it back as soon as it answers properly again.
+
 ### v1.3.16 — A time budget instead of a systemd kill (2026-09-15)
 
 - `connect-hearing-aids` gives up on its own rather than starting a recovery step it cannot finish. With both aids away it stops after about 130 s instead of 172 s with the default budget, and under 90 s with `BUDGET_SECONDS=30`. On 2026-09-14 the same situation ran into the unit's 180 s timeout and was killed mid-reset.
