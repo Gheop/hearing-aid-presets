@@ -73,6 +73,12 @@ sudo install -o gdm -g gdm -m 644 bluetooth/gdm-no-bluetooth.conf \
 
 Effective at the next boot. (Fedora's greeter runs as `gdm` with `/var/lib/gdm` as home.)
 
+Optional: let the script restart bluetoothd by itself when BlueZ ends up holding a stale connection (see Troubleshooting, "One aid shows no GATT objects"). The rule grants exactly one thing: restarting `bluetooth.service`, to your user, without a password.
+
+```sh
+sed "s/@USER@/$USER/" bluetooth/50-hearing-aids-bluetooth.rules | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules > /dev/null
+```
+
 The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distributions that ship it elsewhere (`systemctl show -p ExecStart bluetooth` tells), edit the path in the copied file first.
 
 The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
@@ -176,13 +182,17 @@ extension/            GNOME Shell extension (metadata.json, extension.js, icons/
 scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
 bench/                login-time (login → sound timing from the journal), baseline, journal
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet, bluetoothd systemd override, GDM and suspend WirePlumber configs
+bluetooth/            main.conf snippet, bluetoothd override, GDM and suspend WirePlumber configs, polkit rule
 po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.11 — bluetoothd restart as a last resort (2026-09-15)
+
+- Optional polkit rule (`bluetooth/50-hearing-aids-bluetooth.rules`) letting your user restart `bluetooth.service` without a password. With it installed, `connect-hearing-aids` clears BlueZ's stale-connection state by itself: restart bluetoothd, restart WirePlumber, reconnect.
 
 ### v1.3.10 — No more disconnect/reconnect fallback (2026-09-15)
 

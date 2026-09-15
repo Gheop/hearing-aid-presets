@@ -66,6 +66,9 @@ Done. Remaining steps (root):
      sudo install -d -o gdm -g gdm /var/lib/gdm/.config/wireplumber/wireplumber.conf.d
      sudo install -o gdm -g gdm -m 644 $HERE/bluetooth/gdm-no-bluetooth.conf \
          /var/lib/gdm/.config/wireplumber/wireplumber.conf.d/51-disable-bluetooth.conf
+  5. Optional, lets the script restart bluetoothd by itself as a last resort:
+     sed "s/@USER@/$USER/" $HERE/bluetooth/50-hearing-aids-bluetooth.rules \
+         | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules > /dev/null
 Then log out and back in: the extension loads at login and the service
 connects the aids.
 EOF

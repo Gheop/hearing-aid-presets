@@ -1,0 +1,14 @@
+// polkit rule: let one user restart bluetooth.service without a password, so
+// connect-hearing-aids can clear BlueZ's "No matching connection for device"
+// state by itself (last resort, after two adapter resets). Nothing else is
+// granted: one unit, one verb, one user.
+// Install: sed "s/@USER@/$USER/" bluetooth/50-hearing-aids-bluetooth.rules \
+//            | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "bluetooth.service" &&
+        action.lookup("verb") == "restart" &&
+        subject.user == "@USER@") {
+        return polkit.Result.YES;
+    }
+});
