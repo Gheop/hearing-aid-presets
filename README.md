@@ -4,7 +4,7 @@ Use LE Audio hearing aids on Linux, and switch their programs from the GNOME top
 
 ![Top bar menu listing the hearing aid programs](docs/images/menu.webp)
 
-Tested with a pair of **ReSound Vivia 960** on Fedora 44 (kernel 7.1, BlueZ 5.87, PipeWire 1.6.8, WirePlumber 0.5.14, GNOME 50, Intel AX211). Any hearing aid that implements the Bluetooth LE Audio *Hearing Access Service* (HAS) should work with the extension; the setup notes apply to any LE Audio device.
+Tested with a pair of **ReSound Vivia 960** on Fedora 44 (kernel 7.1 and 7.2, BlueZ 5.87, PipeWire 1.6.8, WirePlumber 0.5.14, GNOME 50, Intel AX211). Any hearing aid that implements the Bluetooth LE Audio *Hearing Access Service* (HAS) should work with the extension; the setup notes apply to any LE Audio device.
 
 ## Compatible devices
 
@@ -31,12 +31,12 @@ What you get:
 
 - Stereo LC3 streaming from PipeWire to both aids, through the standard BlueZ + PipeWire stack. No third-party daemon.
 - A GNOME Shell extension: an ear icon appears while the aids are connected, with a menu showing the model, the battery level of each ear, a volume slider per ear, and the programs ("Universal", "Noise", "Outdoor"...). One click switches both ears. The menu follows changes made on the aids or from the phone.
-- A `connect-hearing-aids` script and a user service that connect the aids at login, check that the LE Audio stream really comes up, and work around two BlueZ quirks that otherwise leave you without sound after a session restart or a reboot.
+- A `connect-hearing-aids` script and a user service that connect the aids at login, check that the LE Audio stream really comes up, and work around the BlueZ quirks that otherwise leave you without sound, or with one silent ear, after a session restart or a reboot.
 
 ## Requirements
 
 - A Bluetooth controller that supports LE Audio. Check with `sudo btmgmt info`: the `supported settings` line must contain `cis-central`. Intel AX2xx cards do; many cheap "Bluetooth 5.3" USB dongles (Realtek, Actions) do not, whatever the box says. See [docs/CONTROLLERS.md](docs/CONTROLLERS.md).
-- BlueZ 5.77 or later, PipeWire 1.6 or later, a kernel with ISO socket support (6.x is fine).
+- BlueZ 5.77 or later, PipeWire 1.6 or later, a kernel with ISO socket support (6.x or later).
 - `gettext` (`msgfmt`) to compile the menu translations at install time.
 - GNOME Shell 50 for the extension (the `shell-version` field in `extension/metadata.json` is easy to widen if you test on 46 to 49).
 - Hearing aids that advertise the LE Audio services. `bluetoothctl info <MAC>` should list `Audio Stream Control`, `Published Audio Capabilities`, `Common Audio` and `Hearing Aid`.
@@ -63,15 +63,15 @@ sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 ```
 
+The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distributions that ship it elsewhere (`systemctl show -p ExecStart bluetooth` tells), edit the path in the copied file first.
+
+The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
+
 Optional: let the script restart bluetoothd by itself when BlueZ ends up holding a stale connection (see Troubleshooting, "One aid shows no GATT objects"). The rule grants exactly one thing: restarting `bluetooth.service`, to your user, without a password.
 
 ```sh
 sed "s/@USER@/$USER/" bluetooth/50-hearing-aids-bluetooth.rules | sudo tee /etc/polkit-1/rules.d/50-hearing-aids-bluetooth.rules > /dev/null
 ```
-
-The override hard-codes Fedora's `/usr/libexec/bluetooth/bluetoothd`; on distributions that ship it elsewhere (`systemctl show -p ExecStart bluetooth` tells), edit the path in the copied file first.
-
-The price: the GNOME volume slider no longer drives the aids' own volume through BlueZ and becomes a software gain on the stream, which is what you want anyway once the per-ear sliders exist. (`DisablePlugins` in `main.conf` is not a valid key in BlueZ 5.87, hence the systemd override.)
 
 ### 2. User side
 
@@ -102,7 +102,7 @@ The ear icon in the top bar opens the menu: battery level of each ear, one volum
 
 Battery levels come straight from each aid's Battery Level characteristic; bluetoothd itself does not publish `org.bluez.Battery1` for these aids (it logs `More than one BATT service exists for this device` and gives up), so the GNOME Bluetooth panel shows nothing.
 
-The script sources `~/.config/hearing-aids/devices.conf` as shell, and reads the bluetoothd journal to check the stream: if your user cannot read the system journal, it says so and skips that check (add yourself to the `systemd-journal` group to enable it).
+The script sources `~/.config/hearing-aids/devices.conf` as shell. Besides the two addresses it understands `LEFT_ALIAS`, `RIGHT_ALIAS`, and `RESET_ON_BOOT=no` to skip the adapter reset described below. To check the stream it watches the BAP transports and, when it can, the bluetoothd journal; without access to the system journal it says so and relies on the transports alone (add yourself to the `systemd-journal` group for the full check).
 
 On the first run after a boot, the script resets the Bluetooth adapter before connecting: bluetoothd reconnects trusted aids seconds after it starts, before your session's WirePlumber exists, and that early connection leaves an ISO group in the controller that makes the first stream fail with `Device or resource busy`. The reset costs about 7 s of Bluetooth right after login (a Bluetooth keyboard or mouse blinks too) and makes the aids connect with WirePlumber already listening. Later runs skip it.
 
@@ -132,9 +132,9 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: when the BAP profile does not come up it power-cycles the adapter so both aids reconnect together, then checks that both cards are on `bap-sink` and that both transports really carry audio. (Earlier versions disconnected and reconnected the aids instead; with BlueZ 5.87 that regularly ends in the state below.)
 
-**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)`, repeated every 30 s while something plays. The HCI trace behind it ([bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496)): the controller answers `Command Disallowed` to `LE Create CIS`, and keeps doing so even after bluetoothd removes and re-creates the CIG, reconnects the aids or is restarted. Only powering the adapter off and on clears it; the script does that on its first run after each boot, before connecting. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
+**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)`, repeated every 30 s while something plays. The HCI trace behind it ([bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496)): the controller answers `Command Disallowed` to `LE Create CIS`, and keeps doing so even after bluetoothd removes and re-creates the CIG, reconnects the aids or is restarted. Only powering the adapter off and on clears it; the script does that on its first run after each boot, before connecting. `connect-hearing-aids` probes the stream with a few seconds of silence, checks that both transports go active and reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
 
-**One aid shows no GATT objects on D-Bus, or only an `asha-sink` profile** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension only sees the other ear, no sound on that side). Seen with BlueZ 5.87 after an aid reconnects on its own right after a disconnect: bluetoothd logs `No matching connection for device` and attaches no profile, and neither a reconnection nor an adapter reset clears it. Restart bluetoothd, then WirePlumber (it otherwise keeps stale ASHA nodes from before the restart and plays into the void), then the script:
+**One aid shows no GATT objects on D-Bus, or only an `asha-sink` profile** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension only sees the other ear, no sound on that side). Seen with BlueZ 5.87 after an aid reconnects on its own right after a disconnect: bluetoothd logs `No matching connection for device` and attaches no profile, and neither a reconnection nor an adapter reset clears it. With the polkit rule from Installation in place, `connect-hearing-aids` gets out of it by itself: it restarts bluetoothd, then WirePlumber (which otherwise keeps stale ASHA nodes from before the restart and plays into the void), then reconnects. By hand:
 
 ```sh
 sudo systemctl restart bluetooth && systemctl --user restart wireplumber && connect-hearing-aids
@@ -179,6 +179,11 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.13 — README accuracy pass (2026-09-15)
+
+- The polkit paragraph no longer splits the two paragraphs describing the `vcp` plugin override.
+- Corrected: the stream probe plays a few seconds of silence, not one; `devices.conf` documents `RESET_ON_BOOT`; the last-resort bluetoothd restart is automatic when the polkit rule is installed; tested kernels are 7.1 and 7.2.
 
 ### v1.3.12 — Drop the GDM WirePlumber config (2026-09-15)
 
