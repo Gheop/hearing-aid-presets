@@ -32,6 +32,7 @@ LEFT_ALIAS="${LEFT_ALIAS:-}"
 RIGHT_ALIAS="${RIGHT_ALIAS:-}"
 RESET_AT=""
 RESET_ON_BOOT="${RESET_ON_BOOT:-yes}"
+STREAM_EARS=0
 
 # The adapter is powered off for a moment during a reset. Anything that stops
 # the script in that window (systemd's start timeout, Ctrl+C, the session
@@ -119,14 +120,18 @@ bap_endpoints_ready() {
         grep -qi 00002bc9
 }
 
-# True when every connected aid is on the bap-sink profile.
+# True when at least one aid is connected and every connected one sits on the
+# bap-sink profile. Without the count, an empty loop used to report success
+# with both aids in the charger, and the script then reset the adapter twice
+# for nothing.
 bap_ok() {
-    local mac
+    local mac n=0
     for mac in "$RIGHT" "$LEFT"; do
         is_connected "$mac" || continue
         [ "$(active_profile "$mac")" = "bap-sink" ] || return 1
+        n=$((n + 1))
     done
-    return 0
+    [ "$n" -gt 0 ]
 }
 
 connect_both() {
@@ -156,12 +161,24 @@ fi
 transports_active() {
     local path state n=0 pattern
     pattern="/dev_(${RIGHT//:/_}|${LEFT//:/_})/pac_sink[0-9]+/fd[0-9]+\$"
+    STREAM_EARS=0
     for path in $(busctl tree org.bluez --list 2>/dev/null | grep -E "$pattern"); do
         state="$(busctl get-property org.bluez "$path" org.bluez.MediaTransport1 State 2>/dev/null)"
         [ "$state" = 's "active"' ] || return 1
         n=$((n + 1))
     done
+    STREAM_EARS="$n"
     [ "$n" -gt 0 ]
+}
+
+# Say how many ears actually carry the stream: one silent aid used to be
+# reported as a full success.
+ears_note() {
+    case "$STREAM_EARS" in
+        2) echo "both aids" ;;
+        1) echo "one aid only, the other is not streaming" ;;
+        *) echo "$STREAM_EARS aids" ;;
+    esac
 }
 
 # Play a few seconds of silence, check that the transports go active, and
@@ -247,19 +264,25 @@ else
     connect_both
 fi
 
+if ! is_connected "$LEFT" && ! is_connected "$RIGHT"; then
+    echo "Neither aid is connected. They are probably in their charger, out of" >&2
+    echo "range, or connected to your phone (aids accept a single central)." >&2
+    exit 1
+fi
+
 finish() {
     if [ "$(pair_sinks)" -gt 1 ]; then
         echo "The pair shows up as two sinks instead of one coordinated set."
         power_cycle
     fi
     if stream_ok; then
-        echo "BAP profile active, stream established."
+        echo "BAP profile active, stream established ($(ears_note))."
         exit 0
     fi
     echo "ISO stream failed (busy or timed out)."
     power_cycle
     if stream_ok; then
-        echo "BAP profile active, stream established after adapter reset."
+        echo "BAP profile active, stream established after adapter reset ($(ears_note))."
         exit 0
     fi
     echo "Stream still failing after an adapter reset. Try a reboot, and check docs/ for known issues." >&2
@@ -288,7 +311,8 @@ fi
 echo "Still no BAP profile after an adapter reset: bluetoothd is probably holding a stale connection."
 if systemctl --no-ask-password restart bluetooth.service 2>/dev/null; then
     echo "Restarted bluetoothd and WirePlumber, connecting again..."
-    systemctl --user restart wireplumber.service
+    timeout 20 systemctl --user restart wireplumber.service ||
+        echo "  restarting WirePlumber failed or timed out" >&2
     wait_for bap_endpoints_ready 20 || true
     wait_for both_connected 10 || true
     connect_both

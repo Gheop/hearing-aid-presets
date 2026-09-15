@@ -180,6 +180,12 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.15 — Say what is really connected (2026-09-15)
+
+- `connect-hearing-aids` stops when neither aid is connected instead of resetting the adapter twice for nothing: with both aids in the charger it used to report "BAP profile active", fail the stream check and cut Bluetooth twice on the way.
+- The success line now says how many ears carry the stream. One silent aid, the state BlueZ leaves behind after a botched reconnection, used to be reported as a full success.
+- The WirePlumber restart in the last-resort path is bounded by a timeout.
+
 ### v1.3.14 — The adapter never stays off (2026-09-15)
 
 - `connect-hearing-aids` powers the Bluetooth adapter back on if anything stops it mid-reset: the systemd start timeout, Ctrl+C, the session ending. Until now such an interruption left Bluetooth off, keyboard and mouse included, until someone turned it back on by hand. It happened once, on 2026-09-14.
