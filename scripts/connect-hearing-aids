@@ -33,6 +33,20 @@ RIGHT_ALIAS="${RIGHT_ALIAS:-}"
 RESET_AT=""
 RESET_ON_BOOT="${RESET_ON_BOOT:-yes}"
 
+# The adapter is powered off for a moment during a reset. Anything that stops
+# the script in that window (systemd's start timeout, Ctrl+C, the session
+# ending) would leave Bluetooth off, keyboard and mouse included, until
+# someone turns it back on by hand.
+ADAPTER_OFF=0
+restore_adapter() {
+    [ "$ADAPTER_OFF" = 1 ] || return 0
+    ADAPTER_OFF=0
+    echo "Interrupted while the adapter was off: powering it back on." >&2
+    bluetoothctl power on > /dev/null 2>&1
+}
+trap 'restore_adapter; exit 1' INT TERM
+trap restore_adapter EXIT
+
 # D-Bus path of a device, whatever adapter it is paired with.
 device_path() {
     busctl tree org.bluez --list 2>/dev/null | grep -m1 "/dev_${1//:/_}\$"
@@ -185,10 +199,12 @@ both_connected() { is_connected "$LEFT" && is_connected "$RIGHT"; }
 
 power_cycle() {
     echo "Resetting the Bluetooth adapter..."
+    ADAPTER_OFF=1
     bluetoothctl power off > /dev/null 2>&1
     wait_for adapter_off 5 || true
     RESET_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     bluetoothctl power on > /dev/null 2>&1
+    ADAPTER_OFF=0
     wait_for adapter_on 5 || true
     # Trusted aids reconnect on their own right after power on; a connect
     # issued during that reconnection fails, so give them a moment first.
@@ -206,7 +222,14 @@ BOOT_STAMP="${XDG_CACHE_HOME:-$HOME/.cache}/hearing-aids/boot_id"
 first_run_since_boot() {
     local boot_id
     boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" || return 1
-    [ "$(cat "$BOOT_STAMP" 2>/dev/null)" != "$boot_id" ] || return 1
+    [ "$(cat "$BOOT_STAMP" 2>/dev/null)" != "$boot_id" ]
+}
+
+# Only once the reset has actually run: a script killed in the middle of one
+# must still reset on the next run.
+mark_boot_done() {
+    local boot_id
+    boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)" || return 0
     mkdir -p "$(dirname "$BOOT_STAMP")" && echo "$boot_id" > "$BOOT_STAMP"
 }
 
@@ -218,6 +241,7 @@ fi
 if [ "$RESET_ON_BOOT" != no ] && first_run_since_boot; then
     echo "First run since boot: resetting the adapter so the aids connect after WirePlumber..."
     power_cycle
+    mark_boot_done
 else
     echo "Connecting hearing aids..."
     connect_both

@@ -180,6 +180,11 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.14 — The adapter never stays off (2026-09-15)
+
+- `connect-hearing-aids` powers the Bluetooth adapter back on if anything stops it mid-reset: the systemd start timeout, Ctrl+C, the session ending. Until now such an interruption left Bluetooth off, keyboard and mouse included, until someone turned it back on by hand. It happened once, on 2026-09-14.
+- The once-per-boot marker is written after the reset has run, not before, so an interrupted reset is retried on the next run instead of being skipped.
+
 ### v1.3.13 — README accuracy pass (2026-09-15)
 
 - The polkit paragraph no longer splits the two paragraphs describing the `vcp` plugin override.
