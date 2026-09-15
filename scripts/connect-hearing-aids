@@ -16,6 +16,7 @@
 #   LEFT_ALIAS="Vivia"        # optional, shown in GNOME
 #   RIGHT_ALIAS="Vivia R"     # optional
 #   RESET_ON_BOOT=no          # optional, keep the stale ISO group bug reproducible
+#   BUDGET_SECONDS=120        # optional, when to give up instead of retrying
 
 set -u
 
@@ -33,6 +34,20 @@ RIGHT_ALIAS="${RIGHT_ALIAS:-}"
 RESET_AT=""
 RESET_ON_BOOT="${RESET_ON_BOOT:-yes}"
 STREAM_EARS=0
+
+# Each recovery step costs tens of seconds and the aids are not always
+# reachable. Give up on our own terms rather than spending three minutes at
+# login; the unit's TimeoutStartSec sits well above this, so systemd never
+# interrupts a reset. BUDGET_SECONDS is overridable for a manual run.
+BUDGET_SECONDS="${BUDGET_SECONDS:-120}"
+DEADLINE=$(( $(date +%s) + BUDGET_SECONDS ))
+out_of_time() { [ "$(date +%s)" -ge "$DEADLINE" ]; }
+give_up_if_late() {
+    out_of_time || return 0
+    echo "Giving up after ${BUDGET_SECONDS}s rather than starting another recovery step." >&2
+    echo "Run connect-hearing-aids again, or see the Troubleshooting section of the README." >&2
+    exit 1
+}
 
 # The adapter is powered off for a moment during a reset. Anything that stops
 # the script in that window (systemd's start timeout, Ctrl+C, the session
@@ -88,6 +103,7 @@ connect_device() {
     # The first attempt right after a bluetoothd restart often fails with
     # le-connection-abort-by-local; the second one goes through.
     for _ in 1 2; do
+        out_of_time && break
         if timeout 40 bluetoothctl connect "$mac" > /dev/null 2>&1; then
             echo "  $label: connected"
             return 0
@@ -273,6 +289,7 @@ fi
 finish() {
     if [ "$(pair_sinks)" -gt 1 ]; then
         echo "The pair shows up as two sinks instead of one coordinated set."
+        give_up_if_late
         power_cycle
     fi
     if stream_ok; then
@@ -280,6 +297,7 @@ finish() {
         exit 0
     fi
     echo "ISO stream failed (busy or timed out)."
+    give_up_if_late
     power_cycle
     if stream_ok; then
         echo "BAP profile active, stream established after adapter reset ($(ears_note))."
@@ -299,6 +317,7 @@ fi
 # aid reconnects on its own right after a disconnect, and then attaches no
 # profile to it at all; only restarting bluetoothd clears that. A power cycle
 # of the adapter reconnects both aids together and has never produced it.
+give_up_if_late
 echo "No BAP profile: resetting the adapter so both aids reconnect together..."
 power_cycle
 if bap_ok; then
@@ -309,6 +328,7 @@ fi
 # rule from bluetooth/50-hearing-aids-bluetooth.rules is installed), then
 # WirePlumber, which otherwise keeps stale nodes from before the restart.
 echo "Still no BAP profile after an adapter reset: bluetoothd is probably holding a stale connection."
+give_up_if_late
 if systemctl --no-ask-password restart bluetooth.service 2>/dev/null; then
     echo "Restarted bluetoothd and WirePlumber, connecting again..."
     timeout 20 systemctl --user restart wireplumber.service ||

@@ -9,7 +9,10 @@ Requires=wireplumber.service
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/connect-hearing-aids
-TimeoutStartSec=180
+# The script gives up on its own after BUDGET_SECONDS (120 by default) plus
+# whatever step it is in. This sits well above that: being killed in the
+# middle of an adapter reset is what used to leave Bluetooth off.
+TimeoutStartSec=300
 
 [Install]
 WantedBy=graphical-session.target

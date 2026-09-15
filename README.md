@@ -180,6 +180,11 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.16 — A time budget instead of a systemd kill (2026-09-15)
+
+- `connect-hearing-aids` gives up on its own rather than starting a recovery step it cannot finish. With both aids away it now stops after about 80 s instead of 172 s, and on 2026-09-14 the same situation ran into the unit's 180 s timeout and was killed mid-reset.
+- `TimeoutStartSec` raised to 300 s so systemd never interrupts an adapter reset. `BUDGET_SECONDS` in `devices.conf` or the environment tunes when the script gives up (120 s by default).
+
 ### v1.3.15 — Say what is really connected (2026-09-15)
 
 - `connect-hearing-aids` stops when neither aid is connected instead of resetting the adapter twice for nothing: with both aids in the charger it used to report "BAP profile active", fail the stream check and cut Bluetooth twice on the way.
