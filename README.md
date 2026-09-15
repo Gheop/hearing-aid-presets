@@ -63,16 +63,6 @@ sudo systemctl daemon-reload
 sudo systemctl restart bluetooth
 ```
 
-Last, keep the login screen's own WirePlumber away from Bluetooth. GDM starts one a second after bluetoothd, before your session; the aids reconnect at once and that WirePlumber starts negotiating LE Audio with them (`bt_bap_stream_get_qos_links: failed` in the bluetoothd journal). It has no use for them, and one less party touching the aids before your session helps; it is not, on its own, what causes the `Device or resource busy` after a reboot (see Troubleshooting):
-
-```sh
-sudo install -d -o gdm -g gdm /var/lib/gdm/.config/wireplumber/wireplumber.conf.d
-sudo install -o gdm -g gdm -m 644 bluetooth/gdm-no-bluetooth.conf \
-    /var/lib/gdm/.config/wireplumber/wireplumber.conf.d/51-disable-bluetooth.conf
-```
-
-Effective at the next boot. (Fedora's greeter runs as `gdm` with `/var/lib/gdm` as home.)
-
 Optional: let the script restart bluetoothd by itself when BlueZ ends up holding a stale connection (see Troubleshooting, "One aid shows no GATT objects"). The rule grants exactly one thing: restarting `bluetooth.service`, to your user, without a password.
 
 ```sh
@@ -142,7 +132,7 @@ For development, `gnome-shell --devkit --wayland` runs a second shell in a windo
 
 **No sound, or a weak sound on one side, after logging in or restarting PipeWire.** `pactl list cards` shows the aids' cards on profile `off` or `asha-sink`, and the WirePlumber log says `ASHA failed to flush ... written:-11`. BlueZ does not renegotiate BAP for aids that were already connected when PipeWire registered its endpoints. Run `connect-hearing-aids`: when the BAP profile does not come up it power-cycles the adapter so both aids reconnect together, then checks that both cards are on `bap-sink` and that both transports really carry audio. (Earlier versions disconnected and reconnected the aids instead; with BlueZ 5.87 that regularly ends in the state below.)
 
-**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)`, repeated every 30 s while something plays. The HCI trace behind it ([bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496)): the controller answers `Command Disallowed` to `LE Create CIS`, and keeps doing so even after bluetoothd removes and re-creates the CIG, reconnects the aids or is restarted. It happens when the aids connected before any BAP endpoint existed, which is what trusted aids do a second after bluetoothd starts at boot. Only powering the adapter off and on clears it; the script does that on its first run after each boot, before connecting. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
+**Connected, BAP profile active, still no sound.** The bluetoothd journal shows `iso_connect_cb() connect to ...: Device or resource busy (16)`, repeated every 30 s while something plays. The HCI trace behind it ([bluez/bluez#2496](https://github.com/bluez/bluez/issues/2496)): the controller answers `Command Disallowed` to `LE Create CIS`, and keeps doing so even after bluetoothd removes and re-creates the CIG, reconnects the aids or is restarted. Only powering the adapter off and on clears it; the script does that on its first run after each boot, before connecting. `connect-hearing-aids` probes the stream with one second of silence, reads the journal, and does the power cycle by itself when needed. By hand: `bluetoothctl power off`, `bluetoothctl power on`, then reconnect the aids.
 
 **One aid shows no GATT objects on D-Bus, or only an `asha-sink` profile** (`busctl tree org.bluez` lists nothing under its `dev_...` path, the extension only sees the other ear, no sound on that side). Seen with BlueZ 5.87 after an aid reconnects on its own right after a disconnect: bluetoothd logs `No matching connection for device` and attaches no profile, and neither a reconnection nor an adapter reset clears it. Restart bluetoothd, then WirePlumber (it otherwise keeps stale ASHA nodes from before the restart and plays into the void), then the script:
 
@@ -182,13 +172,17 @@ extension/            GNOME Shell extension (metadata.json, extension.js, icons/
 scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
 bench/                login-time (login → sound timing from the journal), baseline, journal
 systemd/user/         hearing-aids-connect.service
-bluetooth/            main.conf snippet, bluetoothd override, GDM and suspend WirePlumber configs, polkit rule
+bluetooth/            main.conf snippet, bluetoothd override, WirePlumber suspend config, polkit rule
 po/                   translations (French so far)
 docs/                 verified hearing aids and Bluetooth controllers, screenshot
 install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.12 — Drop the GDM WirePlumber config (2026-09-15)
+
+- Removed `bluetooth/gdm-no-bluetooth.conf` and its installation step. On Fedora 44 with GDM 50 the login screen runs as a transient `gdm-greeter` account, not as `gdm`, so a file under `/var/lib/gdm` is never read; the greeter kept registering its LE Audio endpoints with it installed. It was not needed either: the greeter's WirePlumber is not what causes the `Device or resource busy` after boot. If you installed it, `sudo rm -r /var/lib/gdm/.config/wireplumber` cleans up.
 
 ### v1.3.11 — bluetoothd restart as a last resort (2026-09-15)
 
