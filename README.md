@@ -144,6 +144,8 @@ sudo systemctl restart bluetooth && systemctl --user restart wireplumber && conn
 
 **`BAP requires ISO Socket which is not enabled`** in the bluetoothd journal: the `KernelExperimental` line is missing.
 
+**bluetoothd crashes.** Check with `coredumpctl list | grep bluetoothd`. Two signatures were found on the test machine and reported upstream: [bluez/bluez#2537](https://github.com/bluez/bluez/issues/2537), a crash in the BAP configuration path when PipeWire and WirePlumber restart while the aids are connected, reproducible with `systemctl --user restart pipewire pipewire-pulse wireplumber`; and [bluez/bluez#2538](https://github.com/bluez/bluez/issues/2538), a crash when an aid disconnects while a `StartNotify` is still pending. Both leave the aids connected with no BAP profile, which `connect-hearing-aids` then repairs.
+
 **Light crackling.** Radio, in our experience: it did not change with Wi-Fi off (5 GHz) and got better after a clean reconnect of both aids. A controller closer to your head helps, provided it supports `cis-central`.
 
 **The aids will not connect.** They are probably connected to your phone. Also, the first connection attempt after a bluetoothd restart often fails with `le-connection-abort-by-local`; the script retries once.
@@ -179,6 +181,10 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.19 — Two bluetoothd crashes reported upstream (2026-09-16)
+
+- Troubleshooting now lists the two `bluetoothd` crash signatures seen on the test machine, both reported upstream with backtraces and, for the first one, a reproduction: [#2537](https://github.com/bluez/bluez/issues/2537) in the BAP configuration path, [#2538](https://github.com/bluez/bluez/issues/2538) in the GATT client on disconnect. Nineteen crashes were captured over twelve days; both leave the aids connected without a BAP profile.
 
 ### v1.3.18 — Hygiene (2026-09-15)
 
