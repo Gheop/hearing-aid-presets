@@ -146,6 +146,8 @@ sudo systemctl restart bluetooth && systemctl --user restart wireplumber && conn
 
 **bluetoothd crashes.** Check with `coredumpctl list | grep bluetoothd`. Two signatures were found on the test machine and reported upstream: [bluez/bluez#2537](https://github.com/bluez/bluez/issues/2537), a crash in the BAP configuration path when PipeWire and WirePlumber restart while the aids are connected, reproducible with `systemctl --user restart pipewire pipewire-pulse wireplumber`; and [bluez/bluez#2538](https://github.com/bluez/bluez/issues/2538), a crash when an aid disconnects while a `StartNotify` is still pending. Both leave the aids connected with no BAP profile, which `connect-hearing-aids` then repairs.
 
+**Sound disappears after a phone notification borrows the aids.** The BAP transport dies, WirePlumber is killed by the kernel about 200 ms later, and when it restarts the aids are still connected, so BlueZ never renegotiates LE Audio: both cards come back with `asha-sink` as their only profile and nothing plays. Reported as [pipewire/pipewire#5475](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/5475). Run `connect-hearing-aids` to get the stream back.
+
 **Light crackling.** Radio, in our experience: it did not change with Wi-Fi off (5 GHz) and got better after a clean reconnect of both aids. A controller closer to your head helps, provided it supports `cis-central`.
 
 **The aids will not connect.** They are probably connected to your phone. Also, the first connection attempt after a bluetoothd restart often fails with `le-connection-abort-by-local`; the script retries once.
@@ -181,6 +183,10 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.20 — The phone-notification silence, reported upstream (2026-09-16)
+
+- Troubleshooting now covers the case where a phone briefly takes the aids and the computer goes silent: WirePlumber is SIGKILLed by the kernel roughly 200 ms after the BAP transport dies, and LE Audio never comes back on its own. Reported as [pipewire/pipewire#5475](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/5475) with the measured timings and everything ruled out.
 
 ### v1.3.19 — Two bluetoothd crashes reported upstream (2026-09-16)
 
