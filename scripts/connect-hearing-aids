@@ -295,6 +295,30 @@ if ! is_connected "$LEFT" && ! is_connected "$RIGHT"; then
     exit 1
 fi
 
+# Last resort, shared by both dead ends: restart bluetoothd (allowed without a
+# password when bluetooth/50-hearing-aids-bluetooth.rules is installed), then
+# WirePlumber, which otherwise keeps stale nodes from before the restart, then
+# reconnect. Runs at most once per invocation.
+#   0 the BAP profile is back   1 restarted, still nothing
+#   2 cannot restart without a password   3 already tried this run
+STACK_RESTARTED=0
+restart_stack() {
+    [ "$STACK_RESTARTED" = 0 ] || return 3
+    STACK_RESTARTED=1
+    if ! systemctl --no-ask-password restart bluetooth.service 2>/dev/null; then
+        echo "Run: sudo systemctl restart bluetooth && systemctl --user restart wireplumber, then this script again." >&2
+        echo "(Install bluetooth/50-hearing-aids-bluetooth.rules to let this script do it by itself.)" >&2
+        return 2
+    fi
+    echo "Restarting bluetoothd and WirePlumber: every Bluetooth device drops for a few seconds."
+    timeout 20 systemctl --user restart wireplumber.service ||
+        echo "  restarting WirePlumber failed or timed out" >&2
+    wait_for bap_endpoints_ready 20 || true
+    wait_for both_connected 10 || true
+    connect_both
+    wait_for bap_ok 15
+}
+
 finish() {
     if [ "$(pair_sinks)" -gt 1 ]; then
         echo "The pair shows up as two sinks instead of one coordinated set."
@@ -312,7 +336,16 @@ finish() {
         echo "BAP profile active, stream established after adapter reset ($(ears_note))."
         exit 0
     fi
-    echo "Stream still failing after an adapter reset. Try a reboot, and check docs/ for known issues." >&2
+    # The adapter reset was not enough. Before giving up, try the same last
+    # resort the no-profile path uses: a stale bluetoothd connection produces
+    # a card with no usable transport just as often as a stale ISO group.
+    echo "Stream still failing after an adapter reset."
+    give_up_if_late
+    if restart_stack && stream_ok; then
+        echo "BAP profile active, stream established after restarting bluetoothd ($(ears_note))."
+        exit 0
+    fi
+    echo "Still no working stream. Try a reboot, and check docs/ for known issues." >&2
     exit 1
 }
 
@@ -333,25 +366,11 @@ if bap_ok; then
     echo "BAP profile active."
     finish
 fi
-# Last resort: restart bluetoothd (allowed without a password when the polkit
-# rule from bluetooth/50-hearing-aids-bluetooth.rules is installed), then
-# WirePlumber, which otherwise keeps stale nodes from before the restart.
 echo "Still no BAP profile after an adapter reset: bluetoothd is probably holding a stale connection."
 give_up_if_late
-if systemctl --no-ask-password restart bluetooth.service 2>/dev/null; then
-    echo "Restarted bluetoothd and WirePlumber, connecting again..."
-    timeout 20 systemctl --user restart wireplumber.service ||
-        echo "  restarting WirePlumber failed or timed out" >&2
-    wait_for bap_endpoints_ready 20 || true
-    wait_for both_connected 10 || true
-    connect_both
-    if wait_for bap_ok 15; then
-        echo "BAP profile active."
-        finish
-    fi
-    echo "Still no BAP profile after restarting bluetoothd. Try a reboot, and check docs/ for known issues." >&2
-    exit 1
+if restart_stack; then
+    echo "BAP profile active."
+    finish
 fi
-echo "Run: sudo systemctl restart bluetooth && systemctl --user restart wireplumber, then this script again." >&2
-echo "(Install bluetooth/50-hearing-aids-bluetooth.rules to let this script do it by itself.)" >&2
+echo "Still no BAP profile after restarting bluetoothd. Try a reboot, and check docs/ for known issues." >&2
 exit 1

@@ -184,6 +184,11 @@ install.sh            installs the user-side pieces
 
 ## Changelog
 
+### v1.3.21 — The script finishes what it starts (2026-09-19)
+
+- `connect-hearing-aids` reaches its last resort from both dead ends. When the stream probe kept failing after an adapter reset, it used to stop and tell you to restart bluetoothd by hand, even though it can do that itself since v1.3.11; only the no-BAP-profile path knew about it. That happened for real on 2026-09-18.
+- The bluetoothd restart now runs at most once per invocation, whichever path reaches it, and says up front that every Bluetooth device will drop for a few seconds.
+
 ### v1.3.20 — The phone-notification silence, reported upstream (2026-09-16)
 
 - Troubleshooting now covers the case where a phone briefly takes the aids and the computer goes silent: WirePlumber is SIGKILLed by the kernel roughly 200 ms after the BAP transport dies, and LE Audio never comes back on its own. Reported as [pipewire/pipewire#5475](https://gitlab.freedesktop.org/pipewire/pipewire/-/issues/5475) with the measured timings and everything ruled out.
