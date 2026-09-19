@@ -9,10 +9,10 @@ set -u
 # A shortcut runs with a bare environment; do not rely on PATH.
 SCRIPT="${HOME}/.local/bin/connect-hearing-aids"
 [ -x "$SCRIPT" ] || SCRIPT="$(command -v connect-hearing-aids || true)"
-[ -n "$SCRIPT" ] && [ -x "$SCRIPT" ] || {
+if [ -z "$SCRIPT" ] || [ ! -x "$SCRIPT" ]; then
     notify-send -u critical -a "Hearing aids" "Hearing aids" "connect-hearing-aids not found"
     exit 1
-}
+fi
 
 # Replace the previous notification instead of stacking one per press.
 notify() {
