@@ -1,0 +1,43 @@
+#!/bin/bash
+# Run connect-hearing-aids and report through desktop notifications, so the
+# repair can be bound to a keyboard shortcut and run without a terminal.
+#
+# GNOME: Settings > Keyboard > Custom Shortcuts, command
+#   /home/you/.local/bin/fix-hearing-aids
+set -u
+
+# A shortcut runs with a bare environment; do not rely on PATH.
+SCRIPT="${HOME}/.local/bin/connect-hearing-aids"
+[ -x "$SCRIPT" ] || SCRIPT="$(command -v connect-hearing-aids || true)"
+[ -n "$SCRIPT" ] && [ -x "$SCRIPT" ] || {
+    notify-send -u critical -a "Hearing aids" "Hearing aids" "connect-hearing-aids not found"
+    exit 1
+}
+
+# Replace the previous notification instead of stacking one per press.
+notify() {
+    local urgency="$1"; shift
+    notify-send -a "Hearing aids" -u "$urgency" -i audio-headphones-symbolic \
+        -h string:x-canonical-private-synchronous:hearing-aids "$@"
+}
+
+# A second press while the first run is still working would fight it: the two
+# would power-cycle the adapter against each other.
+LOCK="${XDG_RUNTIME_DIR:-/tmp}/fix-hearing-aids.lock"
+exec 9> "$LOCK"
+if ! flock -n 9; then
+    notify normal "Hearing aids" "A repair is already running."
+    exit 0
+fi
+
+notify normal "Hearing aids" "Repairing the stream…"
+out="$("$SCRIPT" 2>&1)"
+rc=$?
+last="$(printf '%s\n' "$out" | grep -vE '^\s*$' | tail -1)"
+
+if [ "$rc" -eq 0 ]; then
+    notify normal "Hearing aids" "${last:-Stream restored.}"
+else
+    notify critical "Hearing aids" "${last:-Repair failed.}"
+fi
+exit "$rc"

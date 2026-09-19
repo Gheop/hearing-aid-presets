@@ -27,9 +27,10 @@ for po in "$HERE"/po/*.po; do
     msgfmt --check -o "$EXT_DIR/locale/$lang/LC_MESSAGES/hearing-aid-presets.mo" "$po"
 done
 
-echo "Script -> $BIN_DIR/connect-hearing-aids"
+echo "Scripts -> $BIN_DIR"
 mkdir -p "$BIN_DIR"
 install -m 755 "$HERE/scripts/connect-hearing-aids" "$BIN_DIR/connect-hearing-aids"
+install -m 755 "$HERE/scripts/fix-hearing-aids" "$BIN_DIR/fix-hearing-aids"
 
 echo "User service -> $UNIT_DIR/hearing-aids-connect.service"
 mkdir -p "$UNIT_DIR"

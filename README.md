@@ -108,6 +108,8 @@ On the first run after a boot, the script resets the Bluetooth adapter before co
 
 Run `connect-hearing-aids` by hand whenever the aids are connected but silent, typically after PipeWire or bluetoothd restarted.
 
+`fix-hearing-aids` does the same without a terminal: it reports through desktop notifications and refuses to run twice at once. Bind it to a key in Settings, Keyboard, Custom Shortcuts, with `~/.local/bin/fix-hearing-aids` as the command. Until the upstream bugs below are fixed, having the repair one keystroke away makes the silences bearable.
+
 **Sound arrives a second after the video starts.** WirePlumber suspends the sink after 5 s of silence and BlueZ closes the ISO streams; the next sound waits for `LE Create CIS` on both aids (0.9 s measured here) before anything is heard. `bluetooth/wireplumber-suspend.conf.example` is a WirePlumber rule that keeps the stream open for 300 s instead: copy it to `~/.config/wireplumber/wireplumber.conf.d/` with your aids' addresses, restart WirePlumber, run `connect-hearing-aids`. The aids then decode an empty stream for 5 minutes after every silence, which costs battery; lower the value if that shows.
 
 Hearing aids accept a single central at a time. While they are connected to your phone, the computer cannot connect. Turn off the phone's Bluetooth, or disconnect the aids from it, before connecting here.
@@ -173,7 +175,8 @@ If your aids only support ASHA (Android's pre-LE-Audio protocol) and not LE Audi
 
 ```
 extension/            GNOME Shell extension (metadata.json, extension.js, icons/)
-scripts/              connect-hearing-aids, check (CI), capture-iso-busy (upstream report)
+scripts/              connect-hearing-aids, fix-hearing-aids (notification wrapper),
+                      check (CI), capture-iso-busy (upstream report)
 bench/                login-time (login → sound timing from the journal), baseline, journal
 systemd/user/         hearing-aids-connect.service
 bluetooth/            main.conf snippet, bluetoothd override, WirePlumber suspend config, polkit rule
@@ -183,6 +186,11 @@ install.sh            installs the user-side pieces
 ```
 
 ## Changelog
+
+### v1.3.22 — One-keystroke repair (2026-09-19)
+
+- New `scripts/fix-hearing-aids`: runs the repair, reports through desktop notifications, and takes a lock so two presses cannot power-cycle the adapter against each other. Meant to be bound to a keyboard shortcut, since the upstream bugs make the repair a frequent gesture.
+- `install.sh` installs it alongside `connect-hearing-aids`.
 
 ### v1.3.21 — The script finishes what it starts (2026-09-19)
 
